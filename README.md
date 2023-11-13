@@ -26,3 +26,7 @@ build/tput_micro -s sw 1G 4K 1
 ```shell
 build/lat_micro -s sw 256M 4K 1
 ```
+
+## Development
+
+- Recommended to use clang auto formatter of VSCode. There is a format file `.clang-format`.
