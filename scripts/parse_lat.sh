@@ -5,11 +5,9 @@ printUsage() {
 	echo "Usage: ./$(basename "$0") [sw|sr|rw|rr] <log string>"
 	echo "	Example: ./$(basename "$0") sw \"\$(cat test.log)\""
 	echo "Output format: avg,min,max,std,p_50,p_99,p_999,p_9999,p_99999,[fsync_avg]"
-	exit
 }
 
 parseLog() {
-
 	while IFS= read -r line; do
 		# echo "$line" | xargs
 		# The order of conditions are important.
