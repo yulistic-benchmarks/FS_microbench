@@ -1,4 +1,8 @@
 #!/bin/bash
+if [ "$1" = "re" ]; then
+	rm -rf build
+fi
+
 if [ ! -d "build" ]; then
 	meson setup build
 	# meson init --name oxbow_libfs -f --build

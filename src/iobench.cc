@@ -15,6 +15,7 @@
 #include <string>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <time.h>
@@ -37,6 +38,8 @@ char *test_file_name = "testfile";
 
 // uncomment below to run strawman
 // #define USER_BLOCK_MIGRATION 1
+
+#define PROFILE_CPU_UTILIZATION 1
 
 #ifdef USER_BLOCK_MIGRATION
 #include "batch_migration.h"
@@ -125,8 +128,9 @@ io_bench::io_bench(int _id, unsigned long _file_size_bytes,
 	  test_type(_test_type), zipf_file(_zipf_file)
 {
 	test_file.assign(test_dir_prefix);
-	test_file += "/" + std::string(test_file_name) + std::to_string(0) +
-		     "-" + std::to_string(dev_id) + "-" + std::to_string(id);
+	test_file += "/" + std::to_string(id) + "/" +
+		     std::string(test_file_name) + std::to_string(0) + "-" +
+		     std::to_string(dev_id) + "-" + std::to_string(id);
 	per_thread_stats = 0;
 }
 
@@ -139,7 +143,6 @@ io_bench::io_bench(int _id, unsigned long _file_size_bytes,
 
 #define SHM_PATH "/fs_microbench_shm"
 #define SHM_F_SIZE 128
-// #define OUTPUT_TO_FILE 1     // write output to file not stdout.
 
 void *create_shm(int &fd, int &res)
 {
@@ -206,6 +209,11 @@ void io_bench::prepare(void)
 #endif
 
 	ret = mkdir(test_dir_prefix, 0777);
+
+	string prefix = test_dir_prefix;
+	string subdir_s = prefix + "/" + std::to_string(id);
+	const char *subdir = subdir_s.c_str();
+	ret = mkdir(subdir, 0777);
 
 	if (ret < 0 && errno != EEXIST) {
 		perror("mkdir\n");
@@ -325,6 +333,9 @@ void io_bench::do_write(void)
 	int bytes_written;
 	unsigned long random_range;
 	uint32_t count = 0;
+#ifdef PROFILE_CPU_UTILIZATION
+	struct timespec real_time;
+#endif
 
 	random_range = file_size_bytes / io_size;
 
@@ -398,7 +409,7 @@ void io_bench::do_write(void)
 
 						// time_stats_print(&stats, (char *)"---------------");
 
-						printf("Throughput: %3.3f MB\n",
+						printf("Per Thread Throughput: %3.3f MB\n",
 						       (float)(file_size_bytes) /
 							       (1024.0 *
 								1024.0 *
@@ -470,6 +481,10 @@ void io_bench::do_write(void)
 	}
 
 	if (do_fsync) {
+#ifdef PROFILE_CPU_UTILIZATION
+		clock_gettime(CLOCK_REALTIME, &real_time);
+		printf("Fsync at: %ld\n", real_time.tv_sec);
+#endif
 		fsync(fd);
 	}
 
@@ -843,6 +858,9 @@ int main(int argc, char *argv[])
 	int *shm_proc;
 	int fd, res;
 	char zipf_file_name[100];
+#ifdef PROFILE_CPU_UTILIZATION
+	struct timespec real_time;
+#endif
 
 	device_id = getenv("FILE_ID");
 	ops_cap = 0;
@@ -929,7 +947,10 @@ int main(int argc, char *argv[])
 		//     usleep(1000*10*dev_id);
 	}
 
-	printf("Starting benchmark ...\n");
+#ifdef PROFILE_CPU_UTILIZATION
+	clock_gettime(CLOCK_REALTIME, &real_time);
+	printf("Benchmark starts at: %ld\n", real_time.tv_sec);
+#endif
 	time_stats_start(&main_stats);
 
 	for (auto it : io_workers) {
@@ -942,16 +963,26 @@ int main(int argc, char *argv[])
           pthread_cond_wait(&it->cv, &it->cv_mutex);
   */
 
+	// TODO: Why do we use cv_mutex? We can just use Join here.
+	// printf("start to wait for mutex unlock\n");
 	for (auto it : io_workers)
 		pthread_mutex_lock(&it->cv_mutex);
 
+	// Record time before close files.
+	time_stats_stop(&main_stats);
+#ifdef PROFILE_CPU_UTILIZATION
+	clock_gettime(CLOCK_REALTIME, &real_time);
+	printf("Benchmark ends at: %ld\n", real_time.tv_sec);
+#endif
+
+	// printf("start to wait for cleanup\n");
 	for (auto it : io_workers)
 		it->cleanup();
 
+	// printf("start to wait for join\n");
 	for (auto it : io_workers)
 		it->Join();
-
-	time_stats_stop(&main_stats);
+	// printf("join done.\n");
 
 	// time_stats_stop(&total_stats);
 
