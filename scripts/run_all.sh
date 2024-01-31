@@ -7,7 +7,9 @@ TOTAL_WRITE_SIZE=$((1024 * 1024 * 1024))
 IO_SIZES="1K 4K 16K 64K 1M"
 NUM_THREADS="1"
 PROFILE_CPU_UTILIZATION=1
+# PINNING=""
 PINNING="numactl -N 1 -m 1"
+# PINNING="numactl -N 0 -m 0"
 ##########################################
 
 dropCache() {
@@ -18,11 +20,12 @@ dropCache() {
 ### Microbench throughput
 runMicroTput() {
 	############# Overriding configurations
-	DIRS="/mnt/zj/zj_ordered"
-	OPS="rw"
+	DIRS="/mnt/zj/zj_journal"
+	OPS="sw"
 	TOTAL_WRITE_SIZE=$((40 * 1024)) # in MB
 	IO_SIZES="64K"
 	NUM_THREADS="1 16 4 1"
+	# NUM_THREADS="32"
 	#######################################
 
 	cd "$BENCH_MICRO" || exit
@@ -45,7 +48,8 @@ runMicroTput() {
 						OUT_CPU_FILE=${OUT_FILE}.cpu
 
 						# Start to record CPU utilization with time stamps in background.
-						top -b -d1 | awk '/tput_micro/ {print systime(), $0}' >$OUT_CPU_FILE &
+						# top -b -d1 | awk '/tput_micro/ {print systime(), $0}' >$OUT_CPU_FILE &
+						iostat -c 1 | awk '!/^$|avg-cpu|Linux/ {print systime(), $0}' > $OUT_CPU_FILE &
 					fi
 
 					echo "Dropping cache."
@@ -65,7 +69,8 @@ runMicroTput() {
 
 					if [ -n $PROFILE_CPU_UTILIZATION ]; then
 						# Kill top background process.
-						sudo pkill -9 -x "top"
+						# sudo pkill -9 -x "top"
+						sudo pkill -9 -x "iostat"
 					fi
 				done
 			done
