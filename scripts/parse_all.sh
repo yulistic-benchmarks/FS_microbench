@@ -40,6 +40,23 @@ getMicroCmd() {
 	done <"$1"
 }
 
+### top
+# getCpuUsage() {
+# 	parse_first_line=0
+# 	while read -r line; do
+# 		if [[ $parse_first_line = 0 ]]; then
+# 			parse_first_line=1
+# 			start_time=$(echo "$line" | cut -d " " -f1)
+# 			echo -n "$start_time,"
+# 		fi
+# 		cpu_usage=$(echo "$line" | xargs | cut -d " " -f10)
+# 		echo -n "$cpu_usage,"
+# 	done <"$1"
+
+# 	echo ""
+# }
+
+### iostat
 getCpuUsage() {
 	parse_first_line=0
 	while read -r line; do
@@ -48,7 +65,11 @@ getCpuUsage() {
 			start_time=$(echo "$line" | cut -d " " -f1)
 			echo -n "$start_time,"
 		fi
-		cpu_usage=$(echo "$line" | xargs | cut -d " " -f10)
+		cpu_idle=$(echo "$line" | xargs | cut -d " " -f7)
+
+		# cpu usage = 100 - idle
+		cpu_usage=$(awk "BEGIN {print 100.00 - $cpu_idle}")
+		# cpu_usage=$(echo "100.00 $cpu_idle" | awk '{printf "%.2f", $1 - $2}')
 		echo -n "$cpu_usage,"
 	done <"$1"
 
