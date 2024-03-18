@@ -410,11 +410,7 @@ void io_bench::do_write(void)
 						// time_stats_print(&stats, (char *)"---------------");
 
 						printf("Per Thread Throughput: %3.3f MB\n",
-						       (float)(file_size_bytes) /
-							       (1024.0 *
-								1024.0 *
-								(float)time_stats_get_avg(
-									&stats)));
+						(((double)file_size_bytes) / (1024.0 * 1024.0 * (double)time_stats_get_avg(&stats)));
 					}
 #endif
 					count = 0;
@@ -495,14 +491,14 @@ void io_bench::do_write(void)
 
 #ifdef RUN_N_TIMES
 		printf("Throughput: %3.3f MB\n",
-		       (float)(file_size_bytes * cnt_max) /
+		       ((double)file_size_bytes * cnt_max) /
 			       (1024.0 * 1024.0 *
-				(float)time_stats_get_avg(&stats)));
+				(double)time_stats_get_avg(&stats)));
 #else
 		printf("Throughput: %3.3f MB\n",
-		       (float)(file_size_bytes) /
+		       ((double)file_size_bytes) /
 			       (1024.0 * 1024.0 *
-				(float)time_stats_get_avg(&stats)));
+				(double)time_stats_get_avg(&stats)));
 #endif
 	}
 
@@ -608,11 +604,12 @@ void io_bench::do_read(void)
 		time_stats_stop(&stats);
 		// time_stats_print(&stats, (char *)"---------------");
 
-		// printf("%f\n", (float) time_stats_get_avg(&stats));
+		// printf("%f\n", (double) time_stats_get_avg(&stats));
 
 		printf("Throughput: %3.3f MB\n",
-		       (float)((file_size_bytes) >> 20) /
-			       (float)time_stats_get_avg(&stats));
+		       ((double)file_size_bytes) /
+			       (1024.0 * 1024.0 *
+				(double)time_stats_get_avg(&stats)));
 	}
 
 	return;
@@ -858,6 +855,7 @@ int main(int argc, char *argv[])
 	int *shm_proc;
 	int fd, res;
 	char zipf_file_name[100];
+	double aggr_tput;
 #ifdef PROFILE_CPU_UTILIZATION
 	struct timespec real_time;
 #endif
@@ -990,12 +988,13 @@ int main(int argc, char *argv[])
 
 #ifdef RUN_N_TIMES
 	printf("Aggregated throughput: %3.3f MB\n",
-	       ((float)n_threads * (float)((file_size_bytes * cnt_max) >> 20)) /
-		       (float)time_stats_get_avg(&main_stats));
+	       ((double)n_threads *
+		(double)((file_size_bytes * cnt_max) >> 20)) /
+		       (double)time_stats_get_avg(&main_stats));
 #else
-	printf("Aggregated throughput: %3.3f MB\n",
-	       ((float)n_threads * (float)((file_size_bytes) >> 20)) /
-		       (float)time_stats_get_avg(&main_stats));
+	aggr_tput = (double)n_threads * file_size_bytes / 1024.0 / 1024.0 /
+		    time_stats_get_avg(&main_stats);
+	printf("Aggregated throughput: %3.3f MB\n", aggr_tput);
 #endif
 	// printf("--------------------------------------------\n");
 
