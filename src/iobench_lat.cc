@@ -38,6 +38,7 @@ int remote;
 #define BUF_SIZE (2 << 20)
 
 typedef enum {
+	TOUCH_TRUNC,
 	SEQ_WRITE,
 	SEQ_READ,
 	RAND_WRITE,
@@ -215,12 +216,20 @@ void io_bench::do_write(void)
 
 	random_range = file_size_bytes / io_size;
 
+	// if (test_type == TOUCH_TRUNC) {
+	// 	ftruncate(fd, file_size_bytes);
+	// 	fallocate(fd, 0, 0, file_size_bytes);
+	// 	fsync(fd);
+	// 	return;
+	// }
+
 	cout << "# of ops: " << ops_cap << endl;
 
 	time_stats_init(&iostats, ops_cap);
 	time_stats_init(&fstats, ops_cap);
 
-	if (test_type == SEQ_WRITE || test_type == SEQ_WRITE_READ) {
+	if (test_type == SEQ_WRITE || test_type == SEQ_WRITE_READ ||
+	    test_type == TOUCH_TRUNC) {
 		for (unsigned long i = 0; i < file_size_bytes; i += io_size) {
 			if (i + io_size > file_size_bytes)
 				size = file_size_bytes - i;
@@ -414,6 +423,10 @@ void io_bench::Run(void)
 
 void io_bench::cleanup(void)
 {
+	if (test_type == SEQ_WRITE || test_type == RAND_WRITE) {
+		unlink(test_file.c_str());
+		fsync(fd);
+	}
 	close(fd);
 
 #if 0
@@ -473,7 +486,9 @@ test_t io_bench::get_test_type(char *test_type)
 	/**
    * Check the mode to bench: read or write and type
    */
-	if (!strcmp(test_type, "sr")) {
+	if (!strcmp(test_type, "tt")) {
+		return TOUCH_TRUNC;
+	} else if (!strcmp(test_type, "sr")) {
 		return SEQ_READ;
 	} else if (!strcmp(test_type, "sw")) {
 		return SEQ_WRITE;
@@ -496,8 +511,8 @@ void io_bench::hexdump(void *mem, unsigned int len)
 	unsigned int i, j;
 
 	for (i = 0; i < len + ((len % HEXDUMP_COLS) ?
-				       (HEXDUMP_COLS - len % HEXDUMP_COLS) :
-				       0);
+					     (HEXDUMP_COLS - len % HEXDUMP_COLS) :
+					     0);
 	     i++) {
 		/* print offset */
 		if (i % HEXDUMP_COLS == 0) {

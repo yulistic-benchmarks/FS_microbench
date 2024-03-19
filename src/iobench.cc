@@ -39,7 +39,7 @@ char *test_file_name = "testfile";
 // uncomment below to run strawman
 // #define USER_BLOCK_MIGRATION 1
 
-#define PROFILE_CPU_UTILIZATION 1
+// #define PROFILE_CPU_UTILIZATION 1
 
 #ifdef USER_BLOCK_MIGRATION
 #include "batch_migration.h"
@@ -62,6 +62,7 @@ char *test_file_name = "testfile";
 // #define VERIFY
 
 typedef enum {
+	TOUCH_TRUNC,
 	SEQ_WRITE,
 	SEQ_READ,
 	SEQ_WRITE_READ,
@@ -83,7 +84,7 @@ unsigned long ops_cap;
 int psync; // process barrier
 int wait_signal;
 int do_fsync;
-static unsigned int *shm_proc_inf; // Keep running infinitely.
+// static unsigned int *shm_proc_inf; // Keep running infinitely.
 
 class io_bench : public CThread {
     public:
@@ -333,6 +334,7 @@ void io_bench::do_write(void)
 	int bytes_written;
 	unsigned long random_range;
 	uint32_t count = 0;
+	struct time_stats fsync_time;
 #ifdef PROFILE_CPU_UTILIZATION
 	struct timespec real_time;
 #endif
@@ -348,9 +350,17 @@ void io_bench::do_write(void)
 	}
 #endif
 
+	// if (test_type == TOUCH_TRUNC) {
+	// 	ftruncate(fd, file_size_bytes);
+	// 	fallocate(fd, 0, 0, file_size_bytes);
+	// 	fsync(fd);
+	// 	return;
+	// }
+
+	time_stats_init(&fsync_time, 1);
 	cout << "# of ops: " << ops_cap << endl;
 
-	if (test_type == SEQ_WRITE) {
+	if (test_type == SEQ_WRITE || test_type == TOUCH_TRUNC) {
 		unsigned int _io_size = io_size;
 
 #ifdef RUN_INF
@@ -481,13 +491,20 @@ void io_bench::do_write(void)
 		clock_gettime(CLOCK_REALTIME, &real_time);
 		printf("Fsync at: %ld\n", real_time.tv_sec);
 #endif
+		time_stats_start(&fsync_time);
 		fsync(fd);
+		time_stats_stop(&fsync_time);
 	}
 
 	if (per_thread_stats) {
 		time_stats_stop(&stats);
 
-		// time_stats_print(&stats, (char *)"---------------");
+		printf("(FSYNC)LATENCY: %.3f msec\n",
+		       (double)time_stats_get_avg(&fsync_time) * 1000.0);
+		printf("(FSYNC)Throughput: %3.3f MB\n",
+		       ((double)file_size_bytes) /
+			       (1024.0 * 1024.0 *
+				(double)time_stats_get_avg(&fsync_time)));
 
 #ifdef RUN_N_TIMES
 		printf("Throughput: %3.3f MB\n",
@@ -495,7 +512,7 @@ void io_bench::do_write(void)
 			       (1024.0 * 1024.0 *
 				(double)time_stats_get_avg(&stats)));
 #else
-		printf("Throughput: %3.3f MB\n",
+		printf("(AGGREGATE)Throughput: %3.3f MB\n",
 		       ((double)file_size_bytes) /
 			       (1024.0 * 1024.0 *
 				(double)time_stats_get_avg(&stats)));
@@ -606,7 +623,7 @@ void io_bench::do_read(void)
 
 		// printf("%f\n", (double) time_stats_get_avg(&stats));
 
-		printf("Throughput: %3.3f MB\n",
+		printf("(AGGREGATE)Throughput: %3.3f MB\n",
 		       ((double)file_size_bytes) /
 			       (1024.0 * 1024.0 *
 				(double)time_stats_get_avg(&stats)));
@@ -639,6 +656,10 @@ void io_bench::Run(void)
 
 void io_bench::cleanup(void)
 {
+	if (test_type == SEQ_WRITE || test_type == RAND_WRITE) {
+		unlink(test_file.c_str());
+		fsync(fd);
+	}
 	close(fd);
 
 #if 0
@@ -702,7 +723,9 @@ test_t io_bench::get_test_type(char *test_type)
 	/**
    * Check the mode to bench: read or write and type
    */
-	if (!strcmp(test_type, "sr")) {
+	if (!strcmp(test_type, "tt")) {
+		return TOUCH_TRUNC;
+	} else if (!strcmp(test_type, "sr")) {
 		return SEQ_READ;
 	} else if (!strcmp(test_type, "sw")) {
 		return SEQ_WRITE;
@@ -731,8 +754,8 @@ void io_bench::hexdump(void *mem, unsigned int len)
 	unsigned int i, j;
 
 	for (i = 0; i < len + ((len % HEXDUMP_COLS) ?
-				       (HEXDUMP_COLS - len % HEXDUMP_COLS) :
-				       0);
+					     (HEXDUMP_COLS - len % HEXDUMP_COLS) :
+					     0);
 	     i++) {
 		/* print offset */
 		if (i % HEXDUMP_COLS == 0) {
@@ -852,8 +875,8 @@ int main(int argc, char *argv[])
 	unsigned int io_size = 0;
 	struct time_stats main_stats, total_stats;
 	const char *device_id;
-	int *shm_proc;
-	int fd, res;
+	// int *shm_proc;
+	// int fd, res;
 	char zipf_file_name[100];
 	double aggr_tput;
 #ifdef PROFILE_CPU_UTILIZATION
@@ -871,13 +894,14 @@ int main(int argc, char *argv[])
 	else
 		dev_id = 0;
 
-	shm_proc = (int *)create_shm(fd, res);
+	// [DEBUG NOTE] this sometimes make error, depricate for now
+	// shm_proc = (int *)create_shm(fd, res);
 
 	argc = process_opt_args(argc, argv);
 	if (argc < 5) {
 		if (psync) {
 			printf("Setting shm_val to zero.\n");
-			*shm_proc = 0;
+			// *shm_proc = 0;
 		} else {
 			io_bench::show_usage("tput_micro");
 		}
@@ -937,10 +961,10 @@ int main(int argc, char *argv[])
 
 	if (wait_signal) {
 		printf("Waiting for start signal\n");
-		*shm_proc += 1;
-		while (*shm_proc > 0) {
-			usleep(100);
-		}
+		// *shm_proc += 1;
+		// while (*shm_proc > 0) {
+		// 	usleep(100);
+		// }
 		// Delay start time.
 		//     usleep(1000*10*dev_id);
 	}
