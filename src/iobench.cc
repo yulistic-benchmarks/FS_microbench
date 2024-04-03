@@ -129,8 +129,10 @@ io_bench::io_bench(int _id, unsigned long _file_size_bytes,
 	  test_type(_test_type), zipf_file(_zipf_file)
 {
 	test_file.assign(test_dir_prefix);
-	test_file += "/" + std::to_string(id) + "/" +
-		     std::string(test_file_name) + std::to_string(0) + "-" +
+	// test_file += "/" + std::to_string(id) + "/" +
+	// 	     std::string(test_file_name) + std::to_string(0) + "-" +
+	// 	     std::to_string(dev_id) + "-" + std::to_string(id);
+	test_file += "/" + std::string(test_file_name) + std::to_string(0) + "-" +
 		     std::to_string(dev_id) + "-" + std::to_string(id);
 	per_thread_stats = 0;
 }
@@ -209,17 +211,16 @@ void io_bench::prepare(void)
 	printf("Thread %d assigned to core %d\n", id, id);
 #endif
 
-	ret = mkdir(test_dir_prefix, 0777);
+	// ret = mkdir(test_dir_prefix, 0777);
 
-	string prefix = test_dir_prefix;
-	string subdir_s = prefix + "/" + std::to_string(id);
-	const char *subdir = subdir_s.c_str();
-	ret = mkdir(subdir, 0777);
+	// string prefix = test_dir_prefix;
+	// string subdir_s = prefix + "/" + std::to_string(id);
+	// const char *subdir = subdir_s.c_str();
+	// ret = mkdir(subdir, 0777);
 
-	if (ret < 0 && errno != EEXIST) {
-		perror("mkdir\n");
-		exit(-1);
-	}
+	// if (ret < 0 && errno != EEXIST && ret != -EEXIST) {
+	// 	exit(-1);
+	// }
 
 #ifdef ODIRECT
 	ret = posix_memalign((void **)&buf, 4096, BUF_SIZE);
@@ -454,8 +455,10 @@ void io_bench::do_write(void)
 					       _io_size, bytes_written);
 					errx(1, "write");
 				}
-				if (count >= ops_cap)
+				if (count >= ops_cap) {
+					cout << "write done." << endl;
 					break;
+				}
 			}
 #ifdef RUN_INF
 		}
@@ -534,7 +537,7 @@ void io_bench::do_read(void)
 		time_stats_start(&stats);
 	}
 
-	cout << "# of ops: " << ops_cap << endl;
+	cout << "# of ops: " << ops_cap << ", IOSize: "<< io_size << endl;
 
 	if (test_type == SEQ_READ) {
 #ifdef RUN_INF
@@ -656,9 +659,13 @@ void io_bench::Run(void)
 
 void io_bench::cleanup(void)
 {
-	if (test_type == SEQ_WRITE || test_type == RAND_WRITE) {
-		unlink(test_file.c_str());
+	// if (test_type == SEQ_WRITE || test_type == RAND_WRITE) {
+	// 	unlink(test_file.c_str());
+	// 	fsync(fd);
+	// }
+	if (test_type == TOUCH_TRUNC) {
 		fsync(fd);
+		sync();
 	}
 	close(fd);
 
@@ -925,12 +932,12 @@ int main(int argc, char *argv[])
 	} else
 		strncpy(zipf_file_name, "none", 4);
 
-	// std::cout << "Total file size: " << file_size_bytes << "B" << endl
-	//	<< "io size: " << io_size << "B" << endl
-	//	<< "# of thread: " << n_threads << endl;
+	std::cout << "Total file size: " << file_size_bytes << "B" << endl
+		<< "io size: " << io_size << "B" << endl
+		<< "# of thread: " << n_threads << endl;
 
-	// if(do_fsync)
-	//	std::cout << "Sync mode" << endl;
+	if(do_fsync)
+		std::cout << "Sync mode" << endl;
 
 	if (!ops_cap)
 		ops_cap = file_size_bytes / io_size;
@@ -954,6 +961,8 @@ int main(int argc, char *argv[])
 		pthread_mutex_lock(&it->cv_mutex);
 		it->per_thread_stats = 1;
 	}
+
+	printf("\t\t[oxbow_microbench] prepare done\n");
 
 #ifdef RUN_INF
 	printf("Running as an infinite mode.\n");
@@ -1000,6 +1009,8 @@ int main(int argc, char *argv[])
 	// printf("start to wait for cleanup\n");
 	for (auto it : io_workers)
 		it->cleanup();
+
+	printf("\t\t[oxbow_microbench] cleanup done\n");
 
 	// printf("start to wait for join\n");
 	for (auto it : io_workers)

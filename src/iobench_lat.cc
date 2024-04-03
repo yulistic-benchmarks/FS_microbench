@@ -427,6 +427,8 @@ void io_bench::cleanup(void)
 		unlink(test_file.c_str());
 		fsync(fd);
 	}
+	if (test_type == TOUCH_TRUNC)
+		sync();
 	close(fd);
 
 #if 0
