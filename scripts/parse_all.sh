@@ -5,7 +5,7 @@ printUsage() {
 	echo "$(basename $0) <result_dir>"
 }
 
-getMicroCmd() {
+getMicroTputCmd() {
 	# Delete files to record timestamp.
 	[[ -f $1.start ]] && rm $1.start
 	[[ -f $1.fsync ]] && rm $1.fsync
@@ -15,6 +15,41 @@ getMicroCmd() {
 		# echo "$line"
 		if [[ $line == "Command:"* ]]; then
 			cmd_opt=$(echo $line | sed 's/.*tput_micro//g' | xargs)
+			op=$(echo "$cmd_opt" | cut -d" " -f4)
+			file_size=$(echo "$cmd_opt" | cut -d" " -f5 | cut -d"M" -f1)
+			io_size=$(echo "$cmd_opt" | cut -d" " -f6)
+			thread_num=$(echo "$cmd_opt" | cut -d" " -f7)
+
+			echo -n "$op,$file_size,$io_size,$thread_num,"
+		fi
+
+		if [[ $line == "Benchmark starts at:"* ]]; then
+			start_time=$(echo "$line" | cut -d " " -f4)
+			# echo "start: $start_time"
+			echo $start_time >>"$1.start"
+		elif [[ $line == "Fsync at:"* ]]; then
+			fsync_time=$(echo "$line" | cut -d " " -f3)
+			# echo "fsync: $fsync_time"
+			echo $fsync_time >>"$1.fsync"
+		elif [[ $line == "Benchmark ends at:"* ]]; then
+			end_time=$(echo "$line" | cut -d " " -f4)
+			# echo "end: $end_time"
+			echo $end_time >>"$1.end"
+		fi
+
+	done <"$1"
+}
+
+getMicroLatCmd() {
+	# Delete files to record timestamp.
+	[[ -f $1.start ]] && rm $1.start
+	[[ -f $1.fsync ]] && rm $1.fsync
+	[[ -f $1.end ]] && rm $1.end
+
+	while read -r line; do
+		# echo "$line"
+		if [[ $line == "Command:"* ]]; then
+			cmd_opt=$(echo $line | sed 's/.*lat_micro//g' | xargs)
 			op=$(echo "$cmd_opt" | cut -d" " -f4)
 			file_size=$(echo "$cmd_opt" | cut -d" " -f5 | cut -d"M" -f1)
 			io_size=$(echo "$cmd_opt" | cut -d" " -f6)
@@ -95,7 +130,7 @@ parseMicroTput() {
 
 			# echo -n "$op,$iosize,$thnum,"
 			echo -n "$(basename $d),"
-			getMicroCmd $f
+			getMicroTputCmd $f
 			scripts/parse_tput.sh $op "$(cat $f)"
 
 		done
@@ -125,7 +160,28 @@ parseMicroTput() {
 
 # $1 = lat result dir results/lat
 parseMicroLat() {
-	echo "Lat"
+
+	# Parse latency.
+	echo "### Latency (filesize=MB, latency=usec) ###"
+	echo "name,op,filesize,iosize,threads,avg,min,max,std,p50,p99,p999,p9999,p99999"
+	for d in $1/*; do
+		if ! [ -d "$d" ]; then
+			continue
+		fi
+		for f in $(find $d -type f -name "*.out"); do
+			filename=$(basename $f)
+			op=$(echo $filename | cut -d "_" -f1)
+			# iosize=$(echo $filename | cut -d "_" -f2)
+			# thnum=$(echo $filename | cut -d "_" -f3 | cut -d "t" -f1)
+			# filetype=$(echo $filename | cut -d "." -f2)
+
+			# echo -n "$op,$iosize,$thnum,"
+			echo -n "$(basename $d),"
+			getMicroLatCmd $f
+			scripts/parse_lat.sh $op "$(cat $f)"
+
+		done
+	done
 }
 
 # Execute only this script is directly executed. (Not sourced)
@@ -135,11 +191,13 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 		printUsage
 	fi
 
-	for dir in "$1/*"; do
-		if [ $(basename $dir) = "tput" ]; then
-			parseMicroTput $dir
-		elif [ $(basename $dir) = "lat" ]; then
-			parseMicroLat $dir
+	for dir in $1/*; do
+		if [ -d "$dir" ]; then
+			if [ $(basename $dir) = "tput" ]; then
+				parseMicroTput $dir
+			elif [ $(basename $dir) = "lat" ]; then
+				parseMicroLat $dir
+			fi
 		fi
 	done
 fi
