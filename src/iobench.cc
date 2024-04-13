@@ -21,6 +21,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <vector>
+#include "fsapi.h"
 
 #if 0
 #include <boost/math/distributions/pareto.hpp>
@@ -60,6 +61,27 @@ char *test_file_name = "testfile";
 // #define ODIRECT
 #undef ODIRECT
 // #define VERIFY
+#define stat(pathname, statbuf) fs_stat(pathname, statbuf)
+#define fstat(fd, statbuf) fs_fstat(fd, statbuf)
+// open is a little special as it may only take two args
+int open(const char *pathname, int flags, mode_t mode = 0) {
+  return fs_open(pathname, flags, mode);
+}
+#define close(fd) fs_close(fd)
+#define unlink(pathname) fs_unlink(pathname)
+#define mkdir(pathname, mode) fs_mkdir(pathname, mode)
+#define rmdir(pathname) fs_rmdir(pathname)
+#define fsync(fd) fs_fsync(fd)
+#define sync() fs_syncall()
+#define lseek(fd, offset, whence) fs_lseek(fd, offset, whence)
+#define read(fd, buf, count) fs_allocated_read(fd, buf, count)
+#define pread(fd, buf, count, offset) fs_allocated_pread(fd, buf, count, offset)
+#define write(fd, buf, count) fs_allocated_write(fd, buf, count)
+#define pwrite(fd, buf, count, offset) \
+  fs_allocated_pwrite(fd, buf, count, offset)
+#define malloc(size) fs_malloc(size)
+#define free(ptr) fs_free(ptr)
+#define close(fd) fs_close(fd)
 
 typedef enum {
 	TOUCH_TRUNC,

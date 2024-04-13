@@ -23,6 +23,7 @@ rt_dep = cc.find_library('rt', required : false)
 
 ## Libfs source code headers.
 inc = include_directories('include')
+inc_ufs = include_directories('/home/ahn9807/uFS/cfs/include')
 thread_dep = dependency('threads')
 
 ## Source files.
@@ -33,10 +34,10 @@ tput_bench_srcs = files(['src/iobench.cc']) + common_srcs
 lat_bench_srcs = files(['src/iobench_lat.cc']) + common_srcs
 
 tput_exe = executable('tput_micro',
-tput_bench_srcs, include_directories : [inc], dependencies : [thread_dep, rt_dep], c_args: ['-D_BSD_SOURCE'], link_args: ['-L/home/ahn9807/uFS/cfs/build/', '-lcfs', '-L/home/ahn9807/uFS/cfs/lib/tbb/build/tbb_build_release/', '-ltbb', '-ltbbmalloc'])
+tput_bench_srcs, include_directories : [inc, inc_ufs], dependencies : [thread_dep, rt_dep], c_args: ['-D_BSD_SOURCE'], link_args: ['-L/home/ahn9807/uFS/cfs/build/', '-lcfs', '-L/home/ahn9807/uFS/cfs/lib/tbb/build/tbb_build_release/', '-ltbb', '-ltbbmalloc'])
 
 lat_exe = executable('lat_micro',
-lat_bench_srcs, include_directories : [inc], dependencies : [thread_dep, rt_dep], c_args: ['-D_BSD_SOURCE'], link_args: ['-L/home/ahn9807/uFS/cfs/build/', '-lcfs', '-L/home/ahn9807/uFS/cfs/lib/tbb/build/tbb_build_release/', '-ltbb', '-ltbbmalloc'])
+lat_bench_srcs, include_directories : [inc, inc_ufs], dependencies : [thread_dep, rt_dep], c_args: ['-D_BSD_SOURCE'], link_args: ['-L/home/ahn9807/uFS/cfs/build/', '-lcfs', '-L/home/ahn9807/uFS/cfs/lib/tbb/build/tbb_build_release/', '-ltbb', '-ltbbmalloc'])
 
 #mkfs_srcs = ['src/mkfs/mkfs.c', 'lib/log.c/src/log.c']
 #mkfs_exe = executable('mkfs',
