@@ -27,7 +27,7 @@ inc_ufs = include_directories('/home/ahn9807/uFS/cfs/include')
 thread_dep = dependency('threads')
 
 ## Source files.
-common_srcs = files(['src/thread.cc', 'src/time_stat.c'])
+common_srcs = files(['src/thread.cc', 'src/time_stat.c', '/home/ahn9807/uFS/cfs/src/shmipc.c'])
 
 # tput_bench_srcs = files(['src/iobench.cc']) + common_srcs
 tput_bench_srcs = files(['src/iobench.cc']) + common_srcs

@@ -1060,5 +1060,8 @@ int main(int argc, char *argv[])
 	fflush(stdout);
 	fflush(stderr);
 
+	fs_exit();
+	fs_cleanup();
+
 	return 0;
 }

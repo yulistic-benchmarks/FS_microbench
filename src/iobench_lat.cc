@@ -25,6 +25,9 @@
 
 #include "fsapi.h"
 
+#define MAX_SHM_KEYS 20
+#define SHM_KEY_BASE 20190302
+
 // #define VERIFY
 
 const char *test_dir_prefix = "./pmem";
@@ -52,11 +55,11 @@ int open(const char *pathname, int flags, mode_t mode = 0) {
 #define fsync(fd) fs_fsync(fd)
 #define sync() fs_syncall()
 #define lseek(fd, offset, whence) fs_lseek(fd, offset, whence)
-#define read(fd, buf, count) fs_allocated_read(fd, buf, count)
-#define pread(fd, buf, count, offset) fs_allocated_pread(fd, buf, count, offset)
-#define write(fd, buf, count) fs_allocated_write(fd, buf, count)
+#define read(fd, buf, count) fs_read(fd, buf, count)
+#define pread(fd, buf, count, offset) fs_pread(fd, buf, count, offset)
+#define write(fd, buf, count) fs_write(fd, buf, count)
 #define pwrite(fd, buf, count, offset) \
-  fs_allocated_pwrite(fd, buf, count, offset)
+  fs_pwrite(fd, buf, count, offset)
 #define malloc(size) fs_malloc(size)
 #define free(ptr) fs_free(ptr)
 #define close(fd) fs_close(fd)
@@ -77,7 +80,50 @@ typedef enum { FS } test_mode_t;
 
 typedef unsigned long addr_t;
 
+char *shm_keys_str = NULL;
+
 using namespace std;
+
+int initFs(char *keys_str, int &num_worker) {
+  int aid = -1;
+  if (!keys_str) {
+	fprintf(stderr, "Shared memory keys not provided!\n");
+	exit(1);
+  }
+  key_t keys[MAX_SHM_KEYS] = {
+	  0};  // 20 should be large enough (max number of workers)
+  int len = 0;
+  char *token = strtok(keys_str, ",");
+  while (token) {
+	if (len >= MAX_SHM_KEYS) {
+	  fprintf(stderr, "Too much keys!\n");
+
+	  exit(1);
+	}
+	keys[len] = atoi(token);
+	if (!keys[len]) {
+	  fprintf(stderr, "Invalid key: %s\n", token);
+	  exit(1);
+	}
+	if (len == 0) {
+	  aid = keys[len];
+	}
+	keys[len] += SHM_KEY_BASE;
+	++len;
+	token = strtok(NULL, ",");
+  }
+  num_worker = len;
+  printf("fs_init_multi\n");
+  if (fs_init_multi(len, keys) < 0) {
+	printf("fs_init() error\n");
+	exit(1);
+  }
+  return aid;
+}
+
+void exitFs() {
+  if (fs_exit() < 0) fprintf(stderr, "fs_exit() error\n");
+}
 
 class io_bench : public CThread {
     public:
@@ -169,13 +215,17 @@ void io_bench::prepare(void)
 		for (unsigned long i = 0; i < BUF_SIZE; i++)
 			buf[i] = 1;
 
-		if ((fd = open(test_file.c_str(), O_RDWR, 0)) < 0)
+		// uFS cannot handle absolute path... JHA (I double check it using uFS CLI).
+		// if ((fd = open(test_file.c_str(), O_RDWR, 0)) < 0)
+		if ((fd = open("fileset", O_RDWR, 0)) < 0)
 			err(1, "open");
 	} else {
 		for (unsigned long i = 0; i < BUF_SIZE; i++)
 			buf[i] = '0' + (i % 10);
 
-		fd = open(test_file.c_str(), O_RDWR | O_CREAT | O_TRUNC,
+		// fd = fs_open(test_file.c_str(), O_RDWR | O_CREAT | O_TRUNC,
+		// 	  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+		fd = fs_open("fileset", O_RDWR | O_CREAT | O_TRUNC,
 			  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 
 		// fd = open(test_file.c_str(), O_RDWR | O_CREAT, 0775);
@@ -246,6 +296,11 @@ void io_bench::do_write(void)
 	// 	fsync(fd);
 	// 	return;
 	// }
+
+	// This is mendaotry to use uFS APIs... JHA
+	volatile void* dummy = fs_malloc(1024);
+	fs_free((void*) dummy);
+	printf("worker fs_malloc ok\n");
 
 	cout << "# of ops: " << ops_cap << endl;
 
@@ -341,6 +396,11 @@ void io_bench::do_read(void)
 	int count = 0;
 
 	int size = 0;
+
+	// This is mendaotry to use uFS APIs... JHA
+	volatile void* dummy = fs_malloc(1024);
+	fs_free((void*) dummy);
+	printf("worker fs_malloc ok\n");
 
 	cout << "# of ops: " << ops_cap << endl;
 	time_stats_init(&iostats, ops_cap);
@@ -624,6 +684,26 @@ restart:
 	return argc;
 }
 
+char *generate_keys(int n) 
+{
+	std::string sequence;
+	sequence += "1, ";
+	for (int i = 1; i < n; ++i) {
+		sequence += std::to_string(i);
+		sequence += "01, ";
+	}
+	// Remove the last space
+	sequence.pop_back();
+
+	// Convert std::string to char*
+	char* charArray = new char[sequence.length() + 1];
+	strcpy(charArray, sequence.c_str());
+
+	printf("key string: %s\n", charArray);
+
+	return charArray;
+}
+
 int main(int argc, char *argv[])
 {
 	int n_threads, i;
@@ -648,7 +728,7 @@ int main(int argc, char *argv[])
 	io_size = io_bench::str_to_size(argv[3]);
 
 	if (io_bench::get_test_type(argv[1]) == ZIPF_WRITE ||
-	    io_bench::get_test_type(argv[1]) == ZIPF_READ) {
+		io_bench::get_test_type(argv[1]) == ZIPF_READ) {
 		if (argc != 6) {
 			cout << "must supply zipf file" << endl;
 			exit(-1);
@@ -663,14 +743,25 @@ int main(int argc, char *argv[])
 	else
 		ops_cap = min(file_size_bytes / io_size, ops_cap);
 
-	/*
-  std::cout << "Total file size: " << file_size_bytes << "B" << endl
-          << "io size: " << io_size << "B" << endl
-          << "# of thread: " << n_threads << endl;
-  */
+//   std::cout << "Total file size: " << file_size_bytes << "B" << endl
+// 		  << "io size: " << io_size << "B" << endl
+// 		  << "# of thread: " << n_threads << endl;
 
-	// if(do_fsync)
-	//	std::cout << "Sync mode" << endl;
+	// Initizlie uFS
+   printf("INFO: using uFS APIs\n");
+   int num_workers = n_threads;
+
+   int aid = initFs(generate_keys(num_workers), num_workers);
+	volatile void* dummy = fs_malloc(1024);
+	fs_free((void*) dummy);
+//    printf("aid: %d worker: %d\n", aid, num_workers);
+
+	// This part is used for multiprocessing
+   if ((aid - 1) % num_workers != 0) {
+     int target = (aid - 1) % num_workers;
+     fprintf(stderr, "fileset reassigned to worker:%d num_workers:%d str:%s\n", target, num_workers, shm_keys_str);
+     fs_admin_thread_reassign(0, target, FS_REASSIGN_FUTURE);
+   }
 
 	for (i = 0; i < n_threads; i++) {
 		io_workers.push_back(new io_bench(
@@ -701,6 +792,9 @@ int main(int argc, char *argv[])
 
 	fflush(stdout);
 	fflush(stderr);
+
+	fs_exit();
+	fs_cleanup();
 
 	return 0;
 }
