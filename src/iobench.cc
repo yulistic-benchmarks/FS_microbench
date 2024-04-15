@@ -71,7 +71,6 @@ char *test_file_name = "testfile";
 int open(const char *pathname, int flags, mode_t mode = 0) {
   return fs_open(pathname, flags, mode);
 }
-#define close(fd) fs_close(fd)
 #define unlink(pathname) fs_unlink(pathname)
 #define mkdir(pathname, mode) fs_mkdir(pathname, mode)
 #define rmdir(pathname) fs_rmdir(pathname)
