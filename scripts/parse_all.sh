@@ -116,7 +116,7 @@ parseMicroTput() {
 
 	# Parse throughput.
 	echo "### Throughput (filesize=MB, aggtput=MB/s) ###"
-	echo "name,op,filesize,iosize,threads,aggtput"
+	echo "name,op,filesize,iosize,threads,(fsync)lat,(fsync)tput,aggtput"
 	for d in $1/*; do
 		if ! [ -d "$d" ]; then
 			continue
