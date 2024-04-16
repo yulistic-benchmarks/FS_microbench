@@ -1,6 +1,6 @@
 project('microbench', ['cpp', 'c'],
   version : '0.1',
-  default_options : ['warning_level=3', 'buildtype=debug', 'c_std=gnu99',
+  default_options : ['warning_level=3', 'buildtype=release', 'c_std=gnu99',
   'cpp_std=c++11'])
 
 proj_root = meson.source_root()

@@ -195,11 +195,11 @@ io_bench::io_bench(int _id, unsigned long _file_size_bytes,
 	: id(_id), file_size_bytes(_file_size_bytes), io_size(_io_size),
 	  test_type(_test_type), zipf_file(_zipf_file)
 {
-	test_file.assign(test_dir_prefix);
+	// test_file.assign(test_dir_prefix);
 	// test_file += "/" + std::to_string(id) + "/" +
 	// 	     std::string(test_file_name) + std::to_string(0) + "-" +
 	// 	     std::to_string(dev_id) + "-" + std::to_string(id);
-	test_file += "/" + std::string(test_file_name) + std::to_string(0) + "-" +
+	test_file += std::string(test_file_name) + std::to_string(0) + "-" +
 		     std::to_string(dev_id) + "-" + std::to_string(id);
 	per_thread_stats = 0;
 }
@@ -477,7 +477,6 @@ void io_bench::do_write(void)
 
 				// bytes_written = write(fd, buf, _io_size);
 				bytes_written = fs_allocated_write(fd, buf, _io_size);
-
 #if 0
 			    if (do_fsync) {
 				    fsync(fd);
