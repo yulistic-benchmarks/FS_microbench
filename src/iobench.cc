@@ -59,7 +59,8 @@ char *test_file_name = "testfile";
 #define ALIGN_MASK_FLOOR(x, mask) (((x)) & ~(mask))
 #define ALIGN(x, a) ALIGN_MASK((x), ((__typeof__(x))(a)-1))
 #define ALIGN_FLOOR(x, a) ALIGN_MASK_FLOOR((x), ((__typeof__(x))(a)-1))
-#define BUF_SIZE (2 << 20)
+// #define BUF_SIZE (2 << 20)
+#define BUF_SIZE (64 * 4096)
 
 // #define ODIRECT
 #undef ODIRECT
@@ -164,7 +165,6 @@ class io_bench : public CThread {
 	test_t test_type;
 	string test_file;
 	string zipf_file;
-	char *buf;
 	struct time_stats stats;
 
 	std::list<uint64_t> io_list;
@@ -248,6 +248,7 @@ void destroy_shm(void *addr)
 		exit(-1);
 	}
 }
+
 void io_bench::prepare(void)
 {
 	int ret, s;
@@ -289,42 +290,30 @@ void io_bench::prepare(void)
 	// 	exit(-1);
 	// }
 
-#ifdef ODIRECT
-	ret = posix_memalign((void **)&buf, 4096, BUF_SIZE);
-	if (ret != 0)
-		err(1, "posix_memalign");
-#else
-	buf = new char[(4 << 20)];
-#endif
+	// buf = new char[(4 << 20)];
 
 	if (test_type == SEQ_READ || test_type == RAND_READ) {
-		for (unsigned long i = 0; i < BUF_SIZE; i++)
-			buf[i] = 1;
-
 #ifdef ODIRECT
-		if ((fd = open("testfile", O_RDWR | O_DIRECT, 0666)) < 0)
-		// if ((fd = open(test_file.c_str(), O_RDWR | O_DIRECT, 0666)) < 0)
+		// if ((fd = open("testfile", O_RDWR | O_DIRECT, 0666)) < 0)
+		if ((fd = open(test_file.c_str(), O_RDWR | O_DIRECT, 0666)) < 0)
 #else
-		if ((fd = open("testfile", O_RDWR, 0666)) < 0)
-		// if ((fd = open(test_file.c_str(), O_RDWR, 0666)) < 0)
+		// if ((fd = open("testfile", O_RDWR, 0666)) < 0)
+		if ((fd = open(test_file.c_str(), O_RDWR, 0666)) < 0)
 #endif
 			err(1, "open");
 	} else {
-		for (unsigned long i = 0; i < BUF_SIZE; i++)
-			buf[i] = '0' + (i % 10);
-
 #ifdef ODIRECT
-		fd = open("testfile",
-			  O_RDWR | O_CREAT | O_TRUNC | O_DIRECT,
-			  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-		// fd = open(test_file.c_str(),
+		// fd = open("testfile",
 		// 	  O_RDWR | O_CREAT | O_TRUNC | O_DIRECT,
 		// 	  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-#else
-		fd = open("testfile", O_RDWR | O_CREAT | O_TRUNC,
+		fd = open(test_file.c_str(),
+			  O_RDWR | O_CREAT | O_TRUNC | O_DIRECT,
 			  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-		// fd = open(test_file.c_str(), O_RDWR | O_CREAT | O_TRUNC,
+#else
+		// fd = open("testfile", O_RDWR | O_CREAT | O_TRUNC,
 		// 	  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+		fd = open(test_file.c_str(), O_RDWR | O_CREAT | O_TRUNC,
+			  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 #endif
 		if (fd < 0) {
 			err(1, "open");
@@ -413,6 +402,7 @@ void io_bench::do_write(void)
 #ifdef PROFILE_CPU_UTILIZATION
 	struct timespec real_time;
 #endif
+	char *buf;
 
 	random_range = file_size_bytes / io_size;
 
@@ -436,6 +426,14 @@ void io_bench::do_write(void)
 	volatile void* dummy = fs_malloc(1024);
 	fs_free((void*) dummy);
 	printf("worker fs_malloc ok\n");
+
+	buf = (char *)fs_malloc(BUF_SIZE);
+	if (test_type == SEQ_READ || test_type == RAND_READ)
+		memset(buf, 1, BUF_SIZE);
+	else {
+		for(unsigned long i = 0; i < BUF_SIZE; i++)
+			buf[i] = '0' + (i % 10);
+	}
 
 	time_stats_init(&fsync_time, 1);
 	cout << "# of ops: " << ops_cap << endl;
@@ -477,7 +475,8 @@ void io_bench::do_write(void)
 					buf[j] = '0' + (i % 10);
 #endif
 
-				bytes_written = write(fd, buf, _io_size);
+				// bytes_written = write(fd, buf, _io_size);
+				bytes_written = fs_allocated_write(fd, buf, _io_size);
 
 #if 0
 			    if (do_fsync) {
@@ -515,6 +514,7 @@ void io_bench::do_write(void)
 #ifdef RUN_INF
 		while (1) {
 			// reset offset.
+			// fprintf(stderr, "reset offset\n");
 			lseek(fd, 0, SEEK_SET);
 #endif
 			for (auto it : io_list) {
@@ -527,8 +527,9 @@ void io_bench::do_write(void)
                 _io_size = io_size;
         */
 
-				lseek(fd, it, SEEK_SET);
-				bytes_written = write(fd, buf, _io_size);
+				// lseek(fd, it, SEEK_SET);
+				// fprintf(stderr, "write offset: %lu\n", it);
+				bytes_written = fs_allocated_pwrite(fd, buf, _io_size, it);
 				if (bytes_written != _io_size) {
 					printf("write request %u received len %d\n",
 					       _io_size, bytes_written);
@@ -547,7 +548,7 @@ void io_bench::do_write(void)
 		std::list<uint8_t>::iterator op_it = op_list.begin();
 		for (auto it : io_list) {
 			count++;
-			lseek(fd, it, SEEK_SET);
+			// lseek(fd, it, SEEK_SET);
 
 			// read
 			if (*op_it == 0) {
@@ -555,7 +556,8 @@ void io_bench::do_write(void)
 			}
 			// write
 			else {
-				bytes_written = write(fd, buf, _io_size);
+				// bytes_written = write(fd, buf, _io_size);
+				bytes_written = fs_allocated_write(fd, buf, io_size);
 				if (bytes_written != _io_size) {
 					printf("write request %u received len %d\n",
 					       _io_size, bytes_written);
@@ -608,6 +610,7 @@ void io_bench::do_read(void)
 {
 	int ret;
 	uint32_t count = 0;
+	char *buf;
 
 	pthread_barrier_wait(&tsync);
 
@@ -620,6 +623,15 @@ void io_bench::do_read(void)
 	volatile void* dummy = fs_malloc(1024);
 	fs_free((void*) dummy);
 	printf("worker fs_malloc ok\n");
+
+	buf = (char *)fs_malloc(BUF_SIZE);
+	if (test_type == SEQ_READ || test_type == RAND_READ)
+		memset(buf, 1, BUF_SIZE);
+	else {
+		for(unsigned long i = 0; i < BUF_SIZE; i++)
+			buf[i] = '0' + (i % 10);
+	}
+
 
 	cout << "# of ops: " << ops_cap << ", IOSize: "<< io_size << endl;
 
@@ -640,7 +652,7 @@ void io_bench::do_read(void)
 				memset(buf, 0, io_size);
 
 #endif
-				ret = read(fd, buf, io_size);
+				ret = fs_allocated_read(fd, buf, io_size);
 #if 0
 			    if (ret != io_size) {
 				    printf("read size mismatch: return %d, request %lu\n",
@@ -685,7 +697,7 @@ void io_bench::do_read(void)
                         io_size = io_size;
         */
 
-				ret = pread(fd, buf, io_size, it);
+				ret = fs_allocated_pread(fd, buf, io_size, it);
 				if (count >= ops_cap)
 					break;
 			}
@@ -696,7 +708,7 @@ void io_bench::do_read(void)
 
 #if 0
 	for (unsigned long i = 0; i < file_size_bytes; i++) {
-		int bytes_read = read(fd, buf+i, io_size + 100);
+		int bytes_read = fs_allocated_read(fd, buf+i, io_size + 100);
 
 		if (bytes_read != io_size) {
 			printf("read too far: length %d\n", bytes_read);
@@ -767,12 +779,6 @@ void io_bench::cleanup(void)
 
 		printf("Read data matches\n");
 	}
-#endif
-
-#ifdef ODIRECT
-	free(buf);
-#else
-	delete buf;
 #endif
 }
 
