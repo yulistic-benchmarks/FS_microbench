@@ -295,10 +295,10 @@ void io_bench::prepare(void)
 	if (test_type == SEQ_READ || test_type == RAND_READ) {
 #ifdef ODIRECT
 		// if ((fd = open("testfile", O_RDWR | O_DIRECT, 0666)) < 0)
-		if ((fd = open(test_file.c_str(), O_RDWR | O_DIRECT, 0666)) < 0)
+		if ((fd = open(test_file.c_str(), O_RDWR | O_DIRECT | O_CREAT, 0666)) < 0)
 #else
 		// if ((fd = open("testfile", O_RDWR, 0666)) < 0)
-		if ((fd = open(test_file.c_str(), O_RDWR, 0666)) < 0)
+		if ((fd = open(test_file.c_str(), O_RDWR | O_CREAT, 0666)) < 0)
 #endif
 			err(1, "open");
 	} else {
@@ -652,6 +652,7 @@ void io_bench::do_read(void)
 
 #endif
 				ret = fs_allocated_read(fd, buf, io_size);
+				// ret = fs_read(fd, buf, io_size);
 #if 0
 			    if (ret != io_size) {
 				    printf("read size mismatch: return %d, request %lu\n",
