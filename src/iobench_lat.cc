@@ -98,7 +98,9 @@ io_bench::io_bench(int _id, unsigned long _file_size_bytes,
 	  test_type(_test_type), zipf_file(_zipf_file)
 {
 	test_file.assign(test_dir_prefix);
-	test_file += "/" + std::string(test_file_name); //+ std::to_string(id);
+		test_file += "/" + std::string(test_file_name) + std::to_string(0) + "-" +
+		     "99" + "-" + std::to_string(id);
+	// test_file += "/" + std::string(test_file_name); //+ std::to_string(id);
 }
 
 #define handle_error_en(en, msg)                                               \
@@ -150,6 +152,8 @@ void io_bench::prepare(void)
 	} else {
 		for (unsigned long i = 0; i < BUF_SIZE; i++)
 			buf[i] = '0' + (i % 10);
+
+		cout << test_file.c_str() << endl;
 
 		fd = open(test_file.c_str(), O_RDWR | O_CREAT | O_TRUNC,
 			  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
@@ -423,10 +427,10 @@ void io_bench::Run(void)
 
 void io_bench::cleanup(void)
 {
-	if (test_type == SEQ_WRITE || test_type == RAND_WRITE) {
-		unlink(test_file.c_str());
-		fsync(fd);
-	}
+	// if (test_type == SEQ_WRITE || test_type == RAND_WRITE) {
+	// 	unlink(test_file.c_str());
+	// 	fsync(fd);
+	// }
 	if (test_type == TOUCH_TRUNC)
 		sync();
 	close(fd);

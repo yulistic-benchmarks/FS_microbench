@@ -37,6 +37,9 @@ tput_bench_srcs, include_directories : [inc], dependencies : [thread_dep, rt_dep
 lat_exe = executable('lat_micro',
 lat_bench_srcs, include_directories : [inc], dependencies : [thread_dep, rt_dep], c_args: ['-D_BSD_SOURCE'])
 
+force_bg_src = ['src/ext4_checkpoint.c']
+force_bg_exe = executable('ext4_force_bg', force_bg_src)
+
 #mkfs_srcs = ['src/mkfs/mkfs.c', 'lib/log.c/src/log.c']
 #mkfs_exe = executable('mkfs',
 #                      mkfs_srcs,
