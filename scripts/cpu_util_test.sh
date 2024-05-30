@@ -1,13 +1,13 @@
 #!/bin/bash
 set -m
-# PINNING="numactl -N 0 -m 0"
+PINNING="numactl -N 1 -m 1"
 
 DIR="/tmp/ext4"
 IO_SIZE="4K"
-#OPS="dbal"
-OPS="dbal dbol dbom"
-#NUM_THREADS="4"
-NUM_THREADS="1 2 4 8 16 32"
+OPS="dbal"
+#OPS="dbal dbol dbom"
+#NUM_THREADS="16"
+NUM_THREADS="1 2 4 8 16"
 FILE_SIZE="32"
 
 dropCache() {
@@ -34,21 +34,61 @@ run() {
             echo Command: "$CMD"
             $CMD
 
+            sleep 1
+            
+            echo "Dropping cache."
+	        dropCache
+
+            sleep 1
+            
+            # KWOKER_PIDS=$(ps -eLo pid,tid,class,rtprio,ni,pri,psr,pcpu,stat,comm | grep 'kworker/u66' | awk '{print $1}')
+
+            # # Check if there are any kworker/u66 threads
+            # if [ -z "$KWOKER_PIDS" ]; then
+            # echo "No kworker/u66 threads found."
+            # exit 1
+            # fi  
+
+            # for PID in $KWOKER_PIDS; do
+            # OUTPUT_FILE="perf_kworker_${PID}.data"
+            # echo "Profiling kworker/u66 thread with PID: $PID"
+            # sudo perf record -p $PID -o $OUTPUT_FILE -g -- sleep 100 &
+            # done
+
+
+            # KWOKER_PIDS=$(ps -eLo pid,tid,class,rtprio,ni,pri,psr,pcpu,stat,comm | grep 'jbd2/nvme0n1-8' | awk '{print $1}')
+
+            # # Check if there are any kworker/u66 threads
+            # if [ -z "$KWOKER_PIDS" ]; then
+            # echo "No kworker/u66 threads found."
+            # exit 1
+            # fi  
+
+            # for PID in $KWOKER_PIDS; do
+            # OUTPUT_FILE="perf_data_jbd2-${PID}.data"
+            # echo "Profiling jbd2 thread with PID: $PID"
+            # sudo perf record -p $PID -o $OUTPUT_FILE -g -- sleep 100 &
+            # done
+
+
             python3 pcutil.py "${OUT_DIR}/${TEST_NAME}" &
             perf_pid=$!
             sudo renice -n 0 -p $perf_pid
 
+            sleep 1
+
             CMD="$PINNING $BENCH_MICRO/build/tput_micro -d $DIR -s $OP ${FILE_SIZE} $IO_SIZE $NUM_THREAD"
             echo Command: "$CMD"
-            sudo perf record -o "${OUT_DIR}/${TEST_NAME}-perf.data" -F 99 -e cycles -g -- $CMD
-            # sudo perf record -o "${OUT_DIR}/${TEST_NAME}-perf.data" -F 99 -g -- $CMD
+            sudo perf record -o "${OUT_DIR}/${TEST_NAME}-perf.data" -e cycles -g -- $CMD
+            #sudo perf record -o "${OUT_DIR}/${TEST_NAME}-perf.data" -F 99 -g -- $CMD
             #$CMD
 
             ## Wait until background done
-            sleep 20
+            sleep 15
 
             echo "Force checkpoint"
-            sudo $BENCH_MICRO/build/ext4_force_bg $DIR
+            sync /tmp/ext4
+            #sudo $BENCH_MICRO/build/ext4_force_bg $DIR
 
             sleep 10
             
@@ -58,6 +98,11 @@ run() {
             CMD="$PINNING $BENCH_MICRO/build/tput_micro -d $DIR $CL_OP ${FILE_SIZE} $IO_SIZE $NUM_THREAD"
             echo Command: "$CMD"
             $CMD
+
+            sleep 5
+            
+            sync /tmp/ext4
+
 
             echo "Dropping cache."
 	        dropCache

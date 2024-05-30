@@ -257,7 +257,6 @@ void io_bench::do_clean(void)
 		perror("unlink fail");
 		exit(-1);
 	}
-	sync();
 }
 
 void io_bench::do_prepare(void)
@@ -306,7 +305,7 @@ void io_bench::do_prepare(void)
 	}
 
 	fsync(fd);
-	sync();
+	// sync();
 
 	/* Check file size is right or not */
 	struct stat statbuf;
@@ -505,8 +504,10 @@ int main(int argc, char *argv[])
 	int n_threads, i;
 	std::vector<io_bench *> io_workers;
 	unsigned long file_size_bytes;
+	struct time_stats main_stats;
 	unsigned int io_size = 0;
 	const char *device_id;
+	double aggr_tput;
 
 	device_id = getenv("FILE_ID");
 	ops_cap = 0;
@@ -558,11 +559,27 @@ int main(int argc, char *argv[])
 		it->per_thread_stats = 1;
 	}
 
+	if (io_bench::get_test_type(argv[1]) == FXMARK_DBOL || 
+		io_bench::get_test_type(argv[1]) == FXMARK_DBAL) {
+		time_stats_init(&main_stats, 1);
+		time_stats_start(&main_stats);
+	}
+
 	for (auto it : io_workers)
 		it->Start();
 
 	for (auto it : io_workers)
 		pthread_mutex_lock(&it->cv_mutex);
+
+
+	if (io_bench::get_test_type(argv[1]) == FXMARK_DBOL || 
+		io_bench::get_test_type(argv[1]) == FXMARK_DBAL) {
+		time_stats_stop(&main_stats);
+		time_stats_print(&main_stats, (char *)"--------------- stats");
+		aggr_tput = (double)n_threads * file_size_bytes / 1024.0 / 1024.0 /
+		    time_stats_get_avg(&main_stats);
+		printf("Aggregated throughput: %3.3f MB\n", aggr_tput);
+	}
 
 	for (auto it : io_workers)
 		it->cleanup();
