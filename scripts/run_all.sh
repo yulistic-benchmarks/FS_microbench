@@ -32,6 +32,7 @@ runMicroTput() {
 
 	# DIR_CNT=1
 	for DIR in $DIRS; do
+		mkdir -p $DIR
 		for OP in $OPS; do
 			for IO_SIZE in $IO_SIZES; do
 				for NUM_THREAD in $NUM_THREADS; do
@@ -55,11 +56,7 @@ runMicroTput() {
 					echo "Dropping cache."
 					dropCache
 
-					if [[ -n $OXBOW_PREFIX && $DIR == *"$OXBOW_PREFIX" ]]; then
-						CMD="$PINNING $LIBFS/run.sh $BENCH_MICRO/build/tput_micro -d $DIR -s $OP ${FILE_SIZE}M $IO_SIZE $NUM_THREAD"
-					else
-						CMD="$PINNING $BENCH_MICRO/build/tput_micro -d $DIR -s $OP ${FILE_SIZE}M $IO_SIZE $NUM_THREAD"
-					fi
+					CMD="$PINNING $BENCH_MICRO/build/tput_micro -d $DIR -s $OP ${FILE_SIZE}M $IO_SIZE $NUM_THREAD"
 
 					# Print command.
 					echo Command: "$CMD" | tee ${OUT_FILE}.out
@@ -105,11 +102,7 @@ runMicroLat() {
 				echo "Dropping cache."
 				dropCache
 
-				if [[ -n $OXBOW_PREFIX && $DIR == *"$OXBOW_PREFIX" ]]; then
-					CMD="$PINNING $LIBFS/run.sh $BENCH_MICRO/build/lat_micro -d $DIR -s $OP ${FILE_SIZE}M $IO_SIZE 1"
-				else
-					CMD="$PINNING $BENCH_MICRO/build/lat_micro -d $DIR -s $OP ${FILE_SIZE}M $IO_SIZE 1"
-				fi
+				CMD="$PINNING $BENCH_MICRO/build/lat_micro -d $DIR -s $OP ${FILE_SIZE}M $IO_SIZE 1"
 
 				# Print command.
 				echo Command: "$CMD" | tee $OUT_FILE

@@ -11,19 +11,26 @@ parseLog() {
 	while IFS= read -r line; do
 		# echo "$line" | xargs
 		# The order of conditions are important.
-		if [[ "$line" == *"(FSYNC)LATENCY:"* ]]; then
-			fsync_lat=$(echo "$line" | xargs | cut -d " " -f2)
+		if [[ "$line" == *"Aggregated throughput:"* ]]; then
+			aggr_tput=$(echo "$line" | xargs | cut -d " " -f3)
 		fi
-		if [[ "$line" == *"(FSYNC)Throughput:"* ]]; then
-			fsync_tput=$(echo "$line" | xargs | cut -d " " -f2)
-		fi
-		if [[ "$line" == *"(AGGREGATE)Throughput:"* ]]; then
-			aggr_tput=$(echo "$line" | xargs | cut -d " " -f2)
-		fi
+
+		# if [[ "$line" == *"(FSYNC)LATENCY:"* ]]; then
+		#         fsync_lat=$(echo "$line" | xargs | cut -d " " -f2)
+		# fi
+		# if [[ "$line" == *"(FSYNC)Throughput:"* ]]; then
+		#         fsync_tput=$(echo "$line" | xargs | cut -d " " -f2)
+		# fi
+		# if [[ "$line" == *"(AGGREGATE)Throughput:"* ]]; then
+		#         aggr_tput=$(echo "$line" | xargs | cut -d " " -f2)
+		# fi
+
 		# echo "aggr_tput=$aggr_tput"
+
 	done < <(printf '%s\n' "$1")
 
-	echo "$fsync_lat,$fsync_tput,$aggr_tput"
+	echo "$aggr_tput"
+	# echo "$fsync_lat,$fsync_tput,$aggr_tput"
 }
 
 if [ "$#" -ne 2 ]; then
