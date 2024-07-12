@@ -40,6 +40,15 @@ getMicroCmd() {
 	done <"$1"
 }
 
+getAggrCPUUsage(){
+	f_name=$(basename $1 | cut -d "." -f 1)
+	d_path=$(dirname $1)
+	report_file="${d_path}/${f_name}.report"
+	# sudo perf report --sort overhead -i $1 -F overhead,pid,period,socket --stdio > $report_file
+	sudo perf report --sort overhead -i $1 -F overhead,comm,period,socket --stdio > $report_file
+	cat $report_file | grep -v -E " 0...%|#" > ${d_path}/${f_name}.cpu
+}
+
 ### top
 # getCpuUsage() {
 # 	parse_first_line=0
@@ -101,24 +110,44 @@ parseMicroTput() {
 		done
 	done
 
-	# Parse CPU utilization.
-	echo "### CPU Utilization (% every second, 100% = 1 core) ###"
-	echo "name,op,iosize,threads,start(timestamp),cpuutil..."
+	# Parse CPU utilization. (top or iostat)
+#	echo "### CPU Utilization (% every second, 100% = 1 core) ###"
+#	echo "name,op,iosize,threads,start(timestamp),cpuutil..."
+#	for d in $1/*; do
+#		if ! [ -d "$d" ]; then
+#			continue
+#		fi
+#
+#		for f in $(find $d -type f -name "*.cpu"); do
+#			filename=$(basename $f)
+#			op=$(echo $filename | cut -d "_" -f1)
+#			iosize=$(echo $filename | cut -d "_" -f2)
+#			thnum=$(echo $filename | cut -d "_" -f3 | cut -d "t" -f1)
+#			filetype=$(echo $filename | cut -d "." -f2)
+#
+#			echo -n "$(basename $d),${op},${iosize},${thnum},"
+#
+#			getCpuUsage $f
+#		done
+#	done
+
+
+	echo "Extracting CPU usage from perf data."
 	for d in $1/*; do
 		if ! [ -d "$d" ]; then
 			continue
 		fi
 
-		for f in $(find $d -type f -name "*.cpu"); do
+		for f in $(find $d -type f -name "*.perfdata"); do
 			filename=$(basename $f)
 			op=$(echo $filename | cut -d "_" -f1)
 			iosize=$(echo $filename | cut -d "_" -f2)
 			thnum=$(echo $filename | cut -d "_" -f3 | cut -d "t" -f1)
 			filetype=$(echo $filename | cut -d "." -f2)
 
-			echo -n "$(basename $d),${op},${iosize},${thnum},"
+			# echo -n "$(basename $d),${op},${iosize},${thnum},"
 
-			getCpuUsage $f
+			getAggrCPUUsage $f
 		done
 	done
 }
