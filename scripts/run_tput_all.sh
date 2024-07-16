@@ -35,16 +35,6 @@ fixCPUFreq() {
 
 ### Microbench throughput
 loopMicroTput() {
-	############# Overriding configurations
-	# DIRS="/mnt/zj/zj_journal"
-	# DIRS="/mnt/ext4/ext4_journal"
-	DIRS="/mnt/ext4/ext4_ordered"
-	OPS="sw"
-	TOTAL_WRITE_SIZE=$((40 * 1024)) # in MB
-	IO_SIZES="4K 16K 64K 1M"
-	NUM_THREADS="1 16 4 1"
-	# NUM_THREADS="32"
-	#######################################
 
 	cd "$BENCH_MICRO" || exit
 
@@ -102,6 +92,8 @@ loopMicroTput() {
 					# Execute
 					$CMD | tee -a ${OUT_FILE}.out
 
+					runFileSystemSpecific
+
 					#if [ -n $PROFILE_CPU_UTILIZATION ]; then
 					#	# Kill top background process.
 					#	# sudo pkill -9 -x "top"
@@ -114,50 +106,10 @@ loopMicroTput() {
 	done
 }
 
-runMicroLat() {
-	### Microbench latency
-	### Overriding
-	# DIRS="/oxbow ./"
-	# OPS="sw sr rw rr"
-	TOTAL_WRITE_SIZE="128M"
-	# IO_SIZES="1K 4K 16K 64K 1M"
-	# NUM_THREADS="1"
-
-	cd "$BENCH_MICRO" || exit
-	# DIR_CNT=1
-	for DIR in $DIRS; do
-		for OP in $OPS; do
-			for IO_SIZE in $IO_SIZES; do
-
-				FILE_SIZE=$TOTAL_WRITE_SIZE # There is only 1 thread.
-
-				# Set output file path.
-				# OUT_DIR=./results/lat/dir${DIR_CNT}
-				OUT_DIR=./results/lat/$(basename $DIR)
-				OUT_FILE=$OUT_DIR/${OP}_${IO_SIZE}
-				mkdir -p $OUT_DIR
-
-				echo "Dropping cache."
-				dropCache
-
-				CMD="$PINNING $BENCH_MICRO/build/lat_micro -d $DIR -s $OP ${FILE_SIZE}M $IO_SIZE 1"
-
-				# Print command.
-				echo Command: "$CMD" | tee $OUT_FILE
-
-				# Execute
-				$CMD | tee $OUT_FILE
-			done
-		done
-		# ((DIR_CNT = DIR_CNT + 1))
-	done
-}
-
 # Execute only this script is directly executed. (Not sourced)
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-	fixCPUFreq
+# if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+# 	fixCPUFreq
 
-	loopMicroTput
-	# runMicroLat
-	echo "Output files are in 'results' directory."
-fi
+# 	loopMicroTput
+# 	echo "Output files are in 'results' directory."
+# fi
