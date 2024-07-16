@@ -2,20 +2,22 @@
 # Default configurations #################
 BENCH_MICRO="./" # Set proper path.
 DIRS="/mnt/ext4/ext4_journal /mnt/zj/zj_journal " # Basename is used as a bench run name. Use different name. Ex) /mnt/ext4/text_ext4 --> text_ext4 is name.
-OPS="rw sw sr rr"
+OPS="rw sw sr rr" # Ex: "rw sw sr rr"
 TOTAL_WRITE_SIZE=$((1024 * 1024 * 1024))
-IO_SIZES="1K 4K 16K 64K 1M"
-NUM_THREADS="1"
+IO_SIZES="4K 16K 64K 1M" # Ex: "1K 4K 16K 64K 1M"
+NUM_THREADS="1" # Ex: "1 16 4 1"
 PROFILE_CPU_UTILIZATION=1
 # PINNING=""
 PINNING="numactl -N 1 -m 1"
 # PINNING="numactl -N 0 -m 0"
 # PERF_BIN="perf" # Set correct perf bin path.
-PERF_BIN="/home/yulistic/oxbow/oxbow/linux-kernel/tools/perf/perf" # Set correct perf bin path.
+PERF_BIN="/lib/modules/$(uname -r)/source/tools/perf/perf" # Set correct perf bin path.
 ##########################################
 
 # Check perf bin.
-$PERF_BIN -h &>/dev/null || { echo "Set proper perf bin."; exit 1; }
+if [ "$PROFILE_CPU_UTILIZATION" = "1" ]; then
+	$PERF_BIN -h &>/dev/null || { echo "Set proper perf bin."; exit 1; }
+fi
 
 dropCache() {
 	{ echo 3 | sudo tee /proc/sys/vm/drop_caches; } &>/dev/null
@@ -66,7 +68,7 @@ loopMicroTput() {
 					echo "Dropping cache."
 					dropCache
 
-					if [ -n "$PROFILE_CPU_UTILIZATION" ]; then
+					if [ "$PROFILE_CPU_UTILIZATION" = "1" ]; then
 						#OUT_CPU_FILE=${OUT_FILE}.cpu
 
 						## Start to record CPU utilization with time stamps in background.
@@ -81,20 +83,12 @@ loopMicroTput() {
 						PERF_PREFIX=""
 					fi
 
-					CMD="$PERF_PREFIX $PINNING $BENCH_MICRO/build/tput_micro -d $DIR -s $OP ${FILE_SIZE}M $IO_SIZE $NUM_THREAD"
-
 					# Print mount state.
 					sudo mount > ${OUT_FILE}.mount
 
-					# Print command.
-					echo Command: "$CMD" | tee ${OUT_FILE}.out
-
-					# Execute
-					$CMD | tee -a ${OUT_FILE}.out
-
 					runFileSystemSpecific
 
-					#if [ -n $PROFILE_CPU_UTILIZATION ]; then
+					# if [ "$PROFILE_CPU_UTILIZATION" = "1" ]; then
 					#	# Kill top background process.
 					#	# sudo pkill -9 -x "top"
 					#	sudo pkill -9 -x "iostat"
