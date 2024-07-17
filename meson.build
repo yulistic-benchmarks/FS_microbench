@@ -1,6 +1,6 @@
 project('microbench', ['cpp', 'c'],
   version : '0.1',
-  default_options : ['warning_level=3', 'buildtype=release', 'c_std=gnu99',
+  default_options : ['warning_level=3', 'buildtype=debug', 'c_std=gnu99',
   'cpp_std=c++11'])
 
 proj_root = meson.source_root()
@@ -19,23 +19,25 @@ rt_dep = cc.find_library('rt', required : false)
 
 
 # add_global_arguments('-DFLAG=value', language : 'c')
+# add_project_link_arguments('-lcfs -ltbb -ltbbmalloc', language: 'c')
 
 ## Libfs source code headers.
 inc = include_directories('include')
+inc_ufs = include_directories('/home/ahn9807/uFS/cfs/include')
 thread_dep = dependency('threads')
 
 ## Source files.
-common_srcs = files(['src/thread.cc', 'src/time_stat.c'])
+common_srcs = files(['src/thread.cc', 'src/time_stat.c', '/home/ahn9807/uFS/cfs/src/shmipc.c'])
 
 # tput_bench_srcs = files(['src/iobench.cc']) + common_srcs
 tput_bench_srcs = files(['src/iobench.cc']) + common_srcs
 lat_bench_srcs = files(['src/iobench_lat.cc']) + common_srcs
 
 tput_exe = executable('tput_micro',
-tput_bench_srcs, include_directories : [inc], dependencies : [thread_dep, rt_dep], c_args: ['-D_BSD_SOURCE'])
+tput_bench_srcs, include_directories : [inc, inc_ufs], dependencies : [thread_dep, rt_dep], c_args: ['-D_BSD_SOURCE'], link_args: ['-L/home/ahn9807/uFS/cfs/build/', '-lcfs', '-L/home/ahn9807/uFS/cfs/lib/tbb/build/tbb_build_release/', '-ltbb', '-ltbbmalloc'])
 
 lat_exe = executable('lat_micro',
-lat_bench_srcs, include_directories : [inc], dependencies : [thread_dep, rt_dep], c_args: ['-D_BSD_SOURCE'])
+lat_bench_srcs, include_directories : [inc, inc_ufs], dependencies : [thread_dep, rt_dep], c_args: ['-D_BSD_SOURCE'], link_args: ['-L/home/ahn9807/uFS/cfs/build/', '-lcfs', '-L/home/ahn9807/uFS/cfs/lib/tbb/build/tbb_build_release/', '-ltbb', '-ltbbmalloc'])
 
 #mkfs_srcs = ['src/mkfs/mkfs.c', 'lib/log.c/src/log.c']
 #mkfs_exe = executable('mkfs',
