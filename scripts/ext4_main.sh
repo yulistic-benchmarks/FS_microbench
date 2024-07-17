@@ -1,14 +1,15 @@
 #!/bin/bash
 source scripts/run_tput_all.sh || { echo "Run in the project root directory."; exit 1;}
 
+MOUNT_PATH="/mnt/ext4"
+
 ############# Overriding configurations of run_tput_all.sh
-# DIRS="/mnt/ext4/ext4_journal"
-# DIRS="/mnt/ext4/ext4_ordered"
-# DIRS="./ext4_test"
+# DIRS="$MOUNT_PATH/ext4_journal"
+DIRS="$MOUNT_PATH/ext4_ordered"
 # OPS="sw"
 # TOTAL_WRITE_SIZE=$((40 * 1024)) # in MB
 # IO_SIZES="4K 16K 64K 1M"
-# NUM_THREADS="1 16 4 1"
+# NUM_THREADS="1 4 16"
 
 
 ###### File system specific main function. Should be declared.
@@ -26,7 +27,7 @@ runFileSystemSpecific() {
 
 # Execute only this script is directly executed. (Not sourced)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-	fixCPUFreq
+	# fixCPUFreq
 	loopMicroTput
 	echo "Output files are in 'results' directory."
 fi

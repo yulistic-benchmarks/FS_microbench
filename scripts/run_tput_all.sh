@@ -16,7 +16,7 @@ PERF_BIN="/lib/modules/$(uname -r)/source/tools/perf/perf" # Set correct perf bi
 
 # Check perf bin.
 if [ "$PROFILE_CPU_UTILIZATION" = "1" ]; then
-	$PERF_BIN -h &>/dev/null || { echo "Set proper perf bin."; exit 1; }
+	$PERF_BIN -h &>/dev/null || { echo "Set proper perf bin. Current setup:${PERF_BIN}"; exit 1; }
 fi
 
 dropCache() {
@@ -38,14 +38,16 @@ fixCPUFreq() {
 ### Microbench throughput
 loopMicroTput() {
 
-	cd "$BENCH_MICRO" || exit
-
 	# DIR_CNT=1
 	for DIR in $DIRS; do
-		mkdir -p $DIR
-		for OP in $OPS; do
-			for IO_SIZE in $IO_SIZES; do
-				for NUM_THREAD in $NUM_THREADS; do
+		sudo mkdir -p $DIR
+		for NUM_THREAD in $NUM_THREADS; do
+
+			# Configuration with the different number of threads.
+			[[ $(type -t configCPU) == function ]] && configCPU
+
+			for OP in $OPS; do
+				for IO_SIZE in $IO_SIZES; do
 					# Set file size.
 					FILE_SIZE=$(($TOTAL_WRITE_SIZE / $NUM_THREAD)) # Round down.
 
