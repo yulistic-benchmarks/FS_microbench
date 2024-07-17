@@ -44,7 +44,7 @@ loopMicroTput() {
 		for NUM_THREAD in $NUM_THREADS; do
 
 			# Configuration with the different number of threads.
-			[[ $(type -t configCPU) == function ]] && configCPU
+			[[ $(type -t configMultiThread) == function ]] && configMultiThread
 
 			for OP in $OPS; do
 				for IO_SIZE in $IO_SIZES; do
