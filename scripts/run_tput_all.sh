@@ -40,7 +40,7 @@ loopMicroTput() {
 
 	# DIR_CNT=1
 	for DIR in $DIRS; do
-		sudo mkdir -p $DIR
+		# mkdir -p $DIR
 		for NUM_THREAD in $NUM_THREADS; do
 
 			# Configuration with the different number of threads.

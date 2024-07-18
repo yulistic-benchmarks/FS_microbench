@@ -28,6 +28,13 @@ runFileSystemSpecific() {
 # Execute only this script is directly executed. (Not sourced)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 	# fixCPUFreq
+
+	# mount (TODO)
+	# sudo chown -R $USER:$USER $MOUNT_PATH
+
+	mkdir -p $DIRS
+
 	loopMicroTput
+
 	echo "Output files are in 'results' directory."
 fi

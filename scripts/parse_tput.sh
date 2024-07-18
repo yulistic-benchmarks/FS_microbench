@@ -29,7 +29,7 @@ parseLog() {
 
 	done < <(printf '%s\n' "$1")
 
-	echo "$aggr_tput"
+	echo -n "$aggr_tput,"
 	# echo "$fsync_lat,$fsync_tput,$aggr_tput"
 }
 

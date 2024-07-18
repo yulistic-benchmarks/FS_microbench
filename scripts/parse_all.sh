@@ -1,5 +1,8 @@
 #!/bin/bash
 # set -xve
+#
+# PERF_BIN="perf" # Set correct perf bin path.
+PERF_BIN="/lib/modules/$(uname -r)/source/tools/perf/perf" # Set correct perf bin path.
 
 printUsage() {
 	echo "$(basename $0) <result_dir>"
@@ -44,8 +47,10 @@ getAggrCPUUsage(){
 	f_name=$(basename $1 | cut -d "." -f 1)
 	d_path=$(dirname $1)
 	report_file="${d_path}/${f_name}.report"
-	# sudo perf report --sort overhead -i $1 -F overhead,pid,period,socket --stdio > $report_file
-	sudo perf report --sort overhead -i $1 -F overhead,comm,period,socket --stdio > $report_file
+	# sudo $PERF_BIN report --sort overhead -i $1 -F overhead,pid,period,socket --stdio > $report_file
+	sudo $PERF_BIN report --sort overhead -i $1 -F overhead,comm,period,socket --stdio > $report_file
+
+	# cat only the processes that consumes more than 1% of CPU.
 	cat $report_file | grep -v -E " 0...%|#" > ${d_path}/${f_name}.cpu
 }
 
@@ -85,12 +90,37 @@ getCpuUsage() {
 	echo ""
 }
 
+getCpuCycles() {
+	cpu_cycles=$(grep "Event count" $1 | xargs | cut -d ' ' -f 5)
+	echo -n "$cpu_cycles"
+}
+
 # $1 = tput result dir: results/tput
 parseMicroTput() {
 
+	echo "Extracting CPU usage from perf data."
+	for d in $1/*; do
+		if ! [ -d "$d" ]; then
+			continue
+		fi
+
+		for f in $(find $d -type f -name "*.perfdata"); do
+			filename=$(basename $f)
+			op=$(echo $filename | cut -d "_" -f1)
+			iosize=$(echo $filename | cut -d "_" -f2)
+			thnum=$(echo $filename | cut -d "_" -f3 | cut -d "t" -f1)
+			filetype=$(echo $filename | cut -d "." -f2)
+
+			# echo -n "$(basename $d),${op},${iosize},${thnum},"
+
+			getAggrCPUUsage $f
+		done
+	done
+
+
 	# Parse throughput.
 	echo "### Throughput (filesize=MB, aggtput=MB/s) ###"
-	echo "name,op,filesize,iosize,threads,aggtput"
+	echo "name,op,filesize,iosize,threads,aggtput,cycles"
 	for d in $1/*; do
 		if ! [ -d "$d" ]; then
 			continue
@@ -104,9 +134,14 @@ parseMicroTput() {
 
 			# echo -n "$op,$iosize,$thnum,"
 			echo -n "$(basename $d),"
+
 			getMicroCmd $f
+
 			scripts/parse_tput.sh $op "$(cat $f)"
 
+			getCpuCycles "${f%.*}".report
+
+			echo ""
 		done
 	done
 
@@ -131,25 +166,6 @@ parseMicroTput() {
 #		done
 #	done
 
-
-	echo "Extracting CPU usage from perf data."
-	for d in $1/*; do
-		if ! [ -d "$d" ]; then
-			continue
-		fi
-
-		for f in $(find $d -type f -name "*.perfdata"); do
-			filename=$(basename $f)
-			op=$(echo $filename | cut -d "_" -f1)
-			iosize=$(echo $filename | cut -d "_" -f2)
-			thnum=$(echo $filename | cut -d "_" -f3 | cut -d "t" -f1)
-			filetype=$(echo $filename | cut -d "." -f2)
-
-			# echo -n "$(basename $d),${op},${iosize},${thnum},"
-
-			getAggrCPUUsage $f
-		done
-	done
 }
 
 # $1 = lat result dir results/lat
