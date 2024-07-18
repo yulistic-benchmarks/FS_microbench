@@ -1,20 +1,38 @@
 #!/bin/bash
+# Main function for FS_microbench.
+# set -ex
+
 source scripts/run_tput_all.sh || { echo "Run in the project root directory."; exit 1;}
 
 MOUNT_PATH="/mnt/ext4"
 
-############# Overriding configurations of run_tput_all.sh
-# DIRS="$MOUNT_PATH/ext4_journal"
-DIRS="$MOUNT_PATH/ext4_ordered"
-# OPS="sw"
-# TOTAL_WRITE_SIZE=$((40 * 1024)) # in MB
-# IO_SIZES="4K 16K 64K 1M"
-# NUM_THREADS="1 4 16"
+# Set nvme device path.
+# DEV_PATH="/dev/nvme2n1"
+#
+# Or, get it automatically. nvme-cli is required. (sudo apt install nvme-cli)
+DEV_PATH="$(sudo nvme list | grep "SAMSUNG MZPLJ3T2HBJR-00007" | xargs | cut -d " " -f 1)"
+echo Device path: "$DEV_PATH"
 
+# Set total journal size.
+# TOTAL_JOURNAL_SIZE=5120 # 5 GB
+TOTAL_JOURNAL_SIZE=$((38 * 1024)) # 38 GB
+
+############# Overriding configurations of run_tput_all.sh
+OPS="sw"
+TOTAL_WRITE_SIZE=$((30 * 1024)) # in MB
+IO_SIZES="4K 16K 64K 1M"
+NUM_THREADS="1 4 8 16"
+
+umountFS() {
+	sudo umount $MOUNT_PATH || true
+}
 
 ###### File system specific main function. Should be declared.
 runFileSystemSpecific() {
 	echo "Ext4 main function."
+
+	# dump file system configs.
+	sudo dumpe2fs -h $DEV_PATH > ${OUT_FILE}.fsconf
 
 	CMD="$PERF_PREFIX $PINNING $BENCH_MICRO/build/tput_micro -d $DIR -s $OP ${FILE_SIZE}M $IO_SIZE $NUM_THREAD"
 
@@ -29,12 +47,31 @@ runFileSystemSpecific() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 	# fixCPUFreq
 
-	# mount (TODO)
-	# sudo chown -R $USER:$USER $MOUNT_PATH
+	umountFS
 
+	### Run data=journal mode
+	DIRS="$MOUNT_PATH/ext4_journal"
+
+	# Configure and mount file system.
+	sudo mke2fs -t ext4 -J size=$TOTAL_JOURNAL_SIZE -F -G 1 $DEV_PATH
+	sudo mount -t ext4 -o data=journal $DEV_PATH $MOUNT_PATH
+	sudo chown -R $USER:$USER $MOUNT_PATH
 	mkdir -p $DIRS
 
 	loopMicroTput
+
+	umountFS
+
+	# Run data=ordered mode
+	DIRS="$MOUNT_PATH/ext4_ordered"
+	sudo mke2fs -t ext4 -J size=$TOTAL_JOURNAL_SIZE -F -G 1 $DEV_PATH
+	sudo mount -t ext4 $DEV_PATH $MOUNT_PATH
+	sudo chown -R $USER:$USER $MOUNT_PATH
+	mkdir -p $DIRS
+
+	loopMicroTput
+
+	umountFS
 
 	echo "Output files are in 'results' directory."
 fi

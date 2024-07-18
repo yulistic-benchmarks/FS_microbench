@@ -47,11 +47,13 @@ getAggrCPUUsage(){
 	f_name=$(basename $1 | cut -d "." -f 1)
 	d_path=$(dirname $1)
 	report_file="${d_path}/${f_name}.report"
-	# sudo $PERF_BIN report --sort overhead -i $1 -F overhead,pid,period,socket --stdio > $report_file
-	sudo $PERF_BIN report --sort overhead -i $1 -F overhead,comm,period,socket --stdio > $report_file
+	if [ -f $report_file ]; then
+		# sudo $PERF_BIN report --sort overhead -i $1 -F overhead,pid,period,socket --stdio > $report_file
+		sudo $PERF_BIN report --sort overhead -i $1 -F overhead,comm,period,socket --stdio > $report_file
 
-	# cat only the processes that consumes more than 1% of CPU.
-	cat $report_file | grep -v -E " 0...%|#" > ${d_path}/${f_name}.cpu
+		# cat only the processes that consumes more than 1% of CPU.
+		cat $report_file | grep -v -E " 0...%|#" > ${d_path}/${f_name}.cpu
+	fi
 }
 
 ### top
@@ -91,8 +93,10 @@ getCpuUsage() {
 }
 
 getCpuCycles() {
-	cpu_cycles=$(grep "Event count" $1 | xargs | cut -d ' ' -f 5)
-	echo -n "$cpu_cycles"
+	if [ -f $1 ]; then
+		cpu_cycles=$(grep "Event count" $1 | xargs | cut -d ' ' -f 5)
+		echo -n "$cpu_cycles"
+	fi
 }
 
 # $1 = tput result dir: results/tput

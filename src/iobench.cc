@@ -129,11 +129,15 @@ io_bench::io_bench(int _id, unsigned long _file_size_bytes,
 	  test_type(_test_type), zipf_file(_zipf_file)
 {
 	test_file.assign(test_dir_prefix);
-	// test_file += "/" + std::to_string(id) + "/" +
-	// 	     std::string(test_file_name) + std::to_string(0) + "-" +
-	// 	     std::to_string(dev_id) + "-" + std::to_string(id);
-	test_file += "/" + std::string(test_file_name) + std::to_string(0) + "-" +
+
+	// Private dir
+	test_file += "/" + std::to_string(id) + "/" +
+		     std::string(test_file_name) + std::to_string(0) + "-" +
 		     std::to_string(dev_id) + "-" + std::to_string(id);
+
+	// Shared dir
+	// test_file += "/" + std::string(test_file_name) + std::to_string(0) + "-" +
+	//              std::to_string(dev_id) + "-" + std::to_string(id);
 	per_thread_stats = 0;
 }
 
@@ -213,14 +217,14 @@ void io_bench::prepare(void)
 
 	// ret = mkdir(test_dir_prefix, 0777);
 
-	// string prefix = test_dir_prefix;
-	// string subdir_s = prefix + "/" + std::to_string(id);
-	// const char *subdir = subdir_s.c_str();
-	// ret = mkdir(subdir, 0777);
-
-	// if (ret < 0 && errno != EEXIST && ret != -EEXIST) {
-	// 	exit(-1);
-	// }
+	// Private dir
+	string prefix = test_dir_prefix;
+	string subdir_s = prefix + "/" + std::to_string(id);
+	const char *subdir = subdir_s.c_str();
+	ret = mkdir(subdir, 0777);
+	if (ret < 0 && errno != EEXIST && ret != -EEXIST) {
+		exit(-1);
+	}
 
 #ifdef ODIRECT
 	ret = posix_memalign((void **)&buf, 4096, BUF_SIZE);
