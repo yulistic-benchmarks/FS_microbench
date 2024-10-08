@@ -1,5 +1,5 @@
 #!/bin/bash
-# set -xve
+# set -xe
 #
 # PERF_BIN="perf" # Set correct perf bin path.
 PERF_BIN="/lib/modules/$(uname -r)/source/tools/perf/perf" # Set correct perf bin path.
@@ -8,7 +8,7 @@ printUsage() {
 	echo "$(basename $0) <result_dir>"
 }
 
-getMicroCmd() {
+getTputMicroCmd() {
 	# Delete files to record timestamp.
 	[[ -f $1.start ]] && rm $1.start
 	[[ -f $1.fsync ]] && rm $1.fsync
@@ -43,16 +43,16 @@ getMicroCmd() {
 	done <"$1"
 }
 
-getAggrCPUUsage(){
+getAggrCPUUsage() {
 	f_name=$(basename $1 | cut -d "." -f 1)
 	d_path=$(dirname $1)
 	report_file="${d_path}/${f_name}.report"
 
 	# sudo $PERF_BIN report --sort overhead -i $1 -F overhead,pid,period,socket --stdio > $report_file
-	sudo $PERF_BIN report --sort overhead -i $1 -F overhead,comm,period,socket --stdio > $report_file
+	sudo $PERF_BIN report --sort overhead -i $1 -F overhead,comm,period,socket --stdio >$report_file
 
 	# cat only the processes that consumes more than 1% of CPU.
-	cat $report_file | grep -v -E " 0...%|#" > ${d_path}/${f_name}.cpu
+	cat $report_file | grep -v -E " 0...%|#" >${d_path}/${f_name}.cpu
 }
 
 ### top
@@ -113,7 +113,7 @@ parseMicroTput() {
 	done
 
 	# Parse throughput.
-	echo "### Throughput (filesize=MB, aggtput=MB/s) ###"
+	echo "### Throughput (filesize=MB aggtput=MB/s) ###"
 	echo "name,op,filesize,iosize,threads,aggtput,cycles"
 	for d in $1/*; do
 		if ! [ -d "$d" ]; then
@@ -130,7 +130,7 @@ parseMicroTput() {
 			# echo -n "$op,$iosize,$thnum,"
 			echo -n "$(basename $d),"
 
-			getMicroCmd $f
+			getTputMicroCmd $f
 
 			scripts/parse_tput.sh $op "$(cat $f)"
 
@@ -141,31 +141,72 @@ parseMicroTput() {
 	done
 
 	# Parse CPU utilization. (top or iostat)
-#	echo "### CPU Utilization (% every second, 100% = 1 core) ###"
-#	echo "name,op,iosize,threads,start(timestamp),cpuutil..."
-#	for d in $1/*; do
-#		if ! [ -d "$d" ]; then
-#			continue
-#		fi
-#
-#		for f in $(find $d -type f -name "*.cpu"); do
-#			filename=$(basename $f)
-#			op=$(echo $filename | cut -d "_" -f1)
-#			iosize=$(echo $filename | cut -d "_" -f2)
-#			thnum=$(echo $filename | cut -d "_" -f3 | cut -d "t" -f1)
-#			filetype=$(echo $filename | cut -d "." -f2)
-#
-#			echo -n "$(basename $d),${op},${iosize},${thnum},"
-#
-#			getCpuUsage $f
-#		done
-#	done
+	#	echo "### CPU Utilization (% every second, 100% = 1 core) ###"
+	#	echo "name,op,iosize,threads,start(timestamp),cpuutil..."
+	#	for d in $1/*; do
+	#		if ! [ -d "$d" ]; then
+	#			continue
+	#		fi
+	#
+	#		for f in $(find $d -type f -name "*.cpu"); do
+	#			filename=$(basename $f)
+	#			op=$(echo $filename | cut -d "_" -f1)
+	#			iosize=$(echo $filename | cut -d "_" -f2)
+	#			thnum=$(echo $filename | cut -d "_" -f3 | cut -d "t" -f1)
+	#			filetype=$(echo $filename | cut -d "." -f2)
+	#
+	#			echo -n "$(basename $d),${op},${iosize},${thnum},"
+	#
+	#			getCpuUsage $f
+	#		done
+	#	done
 
+}
+
+getLatMicroCmd() {
+	while read -r line; do
+		# echo "$line"
+		if [[ $line == "Command:"* ]]; then
+			cmd_opt=$(echo $line | sed 's/.*lat_micro//g' | xargs)
+			op=$(echo "$cmd_opt" | cut -d" " -f4)
+			file_size=$(echo "$cmd_opt" | cut -d" " -f5 | cut -d"M" -f1)
+			io_size=$(echo "$cmd_opt" | cut -d" " -f6)
+			thread_num=$(echo "$cmd_opt" | cut -d" " -f7)
+
+			echo -n "$op,$file_size,$io_size,$thread_num,"
+		fi
+	done <"$1"
 }
 
 # $1 = lat result dir results/lat
 parseMicroLat() {
-	echo "Lat"
+	# Parse latency.
+	echo "### Latency (filesize=MB latency=us) ###"
+	echo "name,op,filesize,iosize,threads,avg,min,max,std,p50,p99,p999,p9999,p99999,[fsync_avg],cycles"
+	for d in $1/*; do
+		if ! [ -d "$d" ]; then
+			continue
+		fi
+
+		for f in $(find $d -type f -name "*.out"); do
+			filename=$(basename $f)
+			op=$(echo $filename | cut -d "_" -f1)
+			# iosize=$(echo $filename | cut -d "_" -f2)
+			# thnum=$(echo $filename | cut -d "_" -f3 | cut -d "t" -f1)
+			# filetype=$(echo $filename | cut -d "." -f2)
+
+			# echo -n "$op,$iosize,$thnum,"
+			echo -n "$(basename $d),"
+
+			# set -xe
+			getLatMicroCmd $f
+			# set +xe
+
+			scripts/parse_lat.sh $op "$(cat $f)"
+
+			echo ""
+		done
+	done
 }
 
 # Execute only this script is directly executed. (Not sourced)

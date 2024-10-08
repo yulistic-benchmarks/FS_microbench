@@ -1,6 +1,6 @@
 #!/bin/bash
 # Default configurations #################
-BENCH_MICRO="./" # Set proper path.
+BENCH_MICRO="./"                                  # Set proper path.
 DIRS="/mnt/ext4/ext4_journal /mnt/zj/zj_journal " # Basename is used as a bench run name. Use different name. Ex) /mnt/ext4/text_ext4 --> text_ext4 is name.
 OPS="rw sw sr rr"
 TOTAL_WRITE_SIZE=$((1024 * 1024 * 1024))
@@ -15,7 +15,10 @@ PERF_BIN="/home/yulistic/oxbow/oxbow/linux-kernel/tools/perf/perf" # Set correct
 ##########################################
 
 # Check perf bin.
-$PERF_BIN -h &>/dev/null || { echo "Set proper perf bin."; exit 1; }
+$PERF_BIN -h &>/dev/null || {
+	echo "Set proper perf bin."
+	exit 1
+}
 
 dropCache() {
 	{ echo 3 | sudo tee /proc/sys/vm/drop_caches; } &>/dev/null
@@ -67,7 +70,7 @@ loopMicroTput() {
 					if [ $OP = "sr" ] || [ $OP = "rr" ]; then
 						# Remove the existing files and create them again. Otherwise, the file sizes might be different.
 						rm -rf $DIR/*
-						"$PINNING $BENCH_MICRO/build/tput_micro -d $DIR -s sw ${FILE_SIZE}M $IO_SIZE $NUM_THREAD"
+						$PINNING $BENCH_MICRO/build/tput_micro -d $DIR -s sw ${FILE_SIZE}M $IO_SIZE $NUM_THREAD
 					else
 						# Remove existing files. Otherwise, the file size might be different.
 						rm -rf $DIR/*
@@ -94,7 +97,7 @@ loopMicroTput() {
 					CMD="$PERF_PREFIX $PINNING $BENCH_MICRO/build/tput_micro -d $DIR -s $OP ${FILE_SIZE}M $IO_SIZE $NUM_THREAD"
 
 					# Print mount state.
-					sudo mount > ${OUT_FILE}.mount
+					sudo mount >${OUT_FILE}.mount
 
 					# Print command.
 					echo Command: "$CMD" | tee ${OUT_FILE}.out

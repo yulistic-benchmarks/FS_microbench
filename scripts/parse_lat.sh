@@ -35,7 +35,7 @@ parseLog() {
 		# echo "avg=$avg min=$min max=$max std=$std p_50=$p_50 p_99=$p_99 p_999=$p_999 p_9999=$p_9999 p_99999=$p_99999 fsync_avg=$fsync_avg"
 	done < <(printf '%s\n' "$1")
 
-	echo "$avg,$min,$max,$std,$p_50,$p_99,$p_999,$p_9999,$p_99999,$fsync_avg"
+	echo -n "$avg,$min,$max,$std,$p_50,$p_99,$p_999,$p_9999,$p_99999,$fsync_avg,"
 }
 
 if [ "$#" -ne 2 ]; then

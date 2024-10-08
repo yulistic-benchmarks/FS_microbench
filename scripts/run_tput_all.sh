@@ -1,11 +1,11 @@
 #!/bin/bash
 # Default configurations #################
-BENCH_MICRO="./" # Set proper path.
+BENCH_MICRO="./"                                  # Set proper path.
 DIRS="/mnt/ext4/ext4_journal /mnt/zj/zj_journal " # Basename is used as a bench run name. Use different name. Ex) /mnt/ext4/text_ext4 --> text_ext4 is name.
-OPS="rw sw sr rr" # Ex: "rw sw sr rr"
+OPS="rw sw sr rr"                                 # Ex: "rw sw sr rr"
 TOTAL_WRITE_SIZE=$((1024 * 1024 * 1024))
 IO_SIZES="4K 16K 64K 1M" # Ex: "1K 4K 16K 64K 1M"
-NUM_THREADS="1" # Ex: "1 16 4 1"
+NUM_THREADS="1"          # Ex: "1 16 4 1"
 PROFILE_CPU_UTILIZATION=0
 # PINNING=""
 PINNING="numactl -N 1 -m 1"
@@ -16,7 +16,10 @@ PERF_BIN="/lib/modules/$(uname -r)/source/tools/perf/perf" # Set correct perf bi
 
 # Check perf bin.
 if [ "$PROFILE_CPU_UTILIZATION" = "1" ]; then
-	$PERF_BIN -h &>/dev/null || { echo "Set proper perf bin. Current setup:${PERF_BIN}"; exit 1; }
+	$PERF_BIN -h &>/dev/null || {
+		echo "Set proper perf bin. Current setup:${PERF_BIN}"
+		exit 1
+	}
 fi
 
 dropCache() {
@@ -61,7 +64,7 @@ loopMicroTput() {
 					if [ $OP = "sr" ] || [ $OP = "rr" ]; then
 						# Remove the existing files and create them again. Otherwise, the file sizes might be different.
 						rm -rf $DIR/*
-						"$PINNING $BENCH_MICRO/build/tput_micro -d $DIR -s sw ${FILE_SIZE}M $IO_SIZE $NUM_THREAD"
+						$PINNING $BENCH_MICRO/build/tput_micro -d $DIR -s sw ${FILE_SIZE}M $IO_SIZE $NUM_THREAD
 					else
 						# Remove existing files. Otherwise, the file size might be different.
 						rm -rf $DIR/*
@@ -86,7 +89,7 @@ loopMicroTput() {
 					fi
 
 					# Print mount state.
-					sudo mount > ${OUT_FILE}.mount
+					sudo mount >${OUT_FILE}.mount
 
 					runFileSystemSpecific
 
