@@ -17,6 +17,33 @@ rt_dep = cc.find_library('rt', required : false)
 ### - *_lib : library
 ### - *_dep : dependencies (to library)
 
+# CFS configuration
+cfs_root_dir = run_command('sh', '-c', 'echo $CFS_ROOT_DIR').stdout().strip()
+
+# Check if CFS_ROOT_DIR is set
+if cfs_root_dir == ''
+  error('CFS_ROOT_DIR environment variable is not set. Please set it to the path of your CFS installation.')
+endif
+
+cfs_include_dir = join_paths(cfs_root_dir, 'cfs/include')
+tbb_include_dir = join_paths(cfs_root_dir, 'cfs/lib/tbb/include')
+cfs_lib_dir = join_paths(cfs_root_dir, 'cfs/build')
+tbb_lib_dir = join_paths(cfs_root_dir, 'cfs/lib/tbb/build/tbb_build_release')
+
+# Add CFS and TBB include directories
+cfs_includes = include_directories(cfs_include_dir)
+tbb_includes = include_directories(tbb_include_dir)
+
+# Find the CFS and TBB libraries
+cfs_dep = declare_dependency(
+  include_directories: cfs_includes,
+  link_args: ['-L' + cfs_lib_dir, '-lcfs']
+)
+
+tbb_dep = declare_dependency(
+  include_directories: tbb_includes,
+  link_args: ['-L' + tbb_lib_dir, '-ltbb', '-ltbbmalloc']
+)
 
 # add_global_arguments('-DFLAG=value', language : 'c')
 
@@ -31,20 +58,17 @@ common_srcs = files(['src/thread.cc', 'src/time_stat.c'])
 tput_bench_srcs = files(['src/iobench.cc']) + common_srcs
 lat_bench_srcs = files(['src/iobench_lat.cc']) + common_srcs
 
+# Create the executables, now with CFS and TBB support
 tput_exe = executable('tput_micro',
-tput_bench_srcs, include_directories : [inc], dependencies : [thread_dep, rt_dep], c_args: ['-D_BSD_SOURCE'])
+  tput_bench_srcs, 
+  include_directories : [inc, cfs_includes, tbb_includes],  # Include CFS and TBB directories
+  dependencies : [thread_dep, rt_dep, cfs_dep, tbb_dep],  # Add CFS and TBB dependencies
+  c_args: ['-D_BSD_SOURCE'],
+  cpp_args: ['-DUFS'])
 
 lat_exe = executable('lat_micro',
-lat_bench_srcs, include_directories : [inc], dependencies : [thread_dep, rt_dep], c_args: ['-D_BSD_SOURCE'])
-
-#mkfs_srcs = ['src/mkfs/mkfs.c', 'lib/log.c/src/log.c']
-#mkfs_exe = executable('mkfs',
-#                      mkfs_srcs,
-#                      include_directories : [inc, common_inc, log_inc, spdk_inc],
-#                      dependencies : [spdk_nvme_dep, spdk_env_dpdk_dep, spdk_vmd_dep], # Shared library
-#                      override_options: ['b_asneeded=false'], # Required for SPDK shared library.
-#                      c_args: ['-DLOG_USE_COLOR'], # Print with color by log.c library.
-#                      # dependencies : [spdk_nvme_dd.as_link_whole()], # Static library
-#                      )
-
-# subdir('test')
+  lat_bench_srcs, 
+  include_directories : [inc, cfs_includes, tbb_includes],  # Include CFS and TBB directories
+  dependencies : [thread_dep, rt_dep, cfs_dep, tbb_dep],  # Add CFS and TBB dependencies
+  c_args: ['-D_BSD_SOURCE'],
+  cpp_args: ['-DUFS'])

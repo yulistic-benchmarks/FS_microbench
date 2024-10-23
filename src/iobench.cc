@@ -36,6 +36,15 @@
 const char *test_dir_prefix = "./pmem";
 char *test_file_name = "testfile";
 
+#ifdef UFS
+#include "fsapi.h"
+const int k[] = {20190302, 20190322, 20190342, 20190362, 20190382, 20190402, 20190422, 20190442, 20190462, 20190482};
+int num_worker; // fs_server # of workers
+int cache_hit;
+int next_hit = 0;
+volatile void* dummy;
+#endif
+
 // uncomment below to run strawman
 // #define USER_BLOCK_MIGRATION 1
 
@@ -221,7 +230,12 @@ void io_bench::prepare(void)
 	string prefix = test_dir_prefix;
 	string subdir_s = prefix + "/" + std::to_string(id);
 	const char *subdir = subdir_s.c_str();
+
+#ifdef UFS
+	ret = fs_mkdir(subdir, 0777);
+#else
 	ret = mkdir(subdir, 0777);
+#endif
 	if (ret < 0 && errno != EEXIST && ret != -EEXIST) {
 		exit(-1);
 	}
@@ -238,16 +252,26 @@ void io_bench::prepare(void)
 		for (unsigned long i = 0; i < BUF_SIZE; i++)
 			buf[i] = 1;
 
+#ifdef UFS
+		int hash = atoi(test_file.c_str() + strlen(test_file.c_str()) - 2);
+		next_hit = hash < cache_hit;
+		if ((fd = fs_open(test_file.c_str(), O_RDWR, 0666)) < 0)
+#else
 #ifdef ODIRECT
 		if ((fd = open(test_file.c_str(), O_RDWR | O_DIRECT, 0666)) < 0)
 #else
 		if ((fd = open(test_file.c_str(), O_RDWR, 0666)) < 0)
 #endif
+#endif /* UFS */
 			err(1, "open");
 	} else {
 		for (unsigned long i = 0; i < BUF_SIZE; i++)
 			buf[i] = '0' + (i % 10);
 
+#ifdef UFS
+		fd = fs_open(test_file.c_str(), O_RDWR | O_CREAT | O_TRUNC,
+			  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+#else
 #ifdef ODIRECT
 		fd = open(test_file.c_str(),
 			  O_RDWR | O_CREAT | O_TRUNC | O_DIRECT,
@@ -256,6 +280,7 @@ void io_bench::prepare(void)
 		fd = open(test_file.c_str(), O_RDWR | O_CREAT | O_TRUNC,
 			  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 #endif
+#endif /* UFS */
 		if (fd < 0) {
 			err(1, "open");
 		}
@@ -402,7 +427,11 @@ void io_bench::do_write(void)
 					buf[j] = '0' + (i % 10);
 #endif
 
+#ifdef UFS
+				bytes_written = fs_allocated_write(fd, buf, _io_size);
+#else
 				bytes_written = write(fd, buf, _io_size);
+#endif
 
 #if 0
 			    if (do_fsync) {
@@ -452,8 +481,13 @@ void io_bench::do_write(void)
                 _io_size = io_size;
         */
 
+#ifdef UFS
+				fs_lseek(fd, it, SEEK_SET);
+				bytes_written = fs_allocated_write(fd, buf, _io_size);
+#else
 				lseek(fd, it, SEEK_SET);
 				bytes_written = write(fd, buf, _io_size);
+#endif
 				if (bytes_written != _io_size) {
 					printf("write request %u received len %d\n",
 					       _io_size, bytes_written);
@@ -472,8 +506,23 @@ void io_bench::do_write(void)
 		std::list<uint8_t>::iterator op_it = op_list.begin();
 		for (auto it : io_list) {
 			count++;
+#ifdef UFS
+			fs_lseek(fd, it, SEEK_SET);
+			// read
+			if (*op_it == 0) {
+				fs_allocated_read(fd, buf, io_size);
+			}
+			// write
+			else {
+				bytes_written = fs_allocated_write(fd, buf, _io_size);
+				if (bytes_written != _io_size) {
+					printf("write request %u received len %d\n",
+					       _io_size, bytes_written);
+					errx(1, "write");
+				}
+			}
+#else
 			lseek(fd, it, SEEK_SET);
-
 			// read
 			if (*op_it == 0) {
 				read(fd, buf, io_size);
@@ -487,6 +536,8 @@ void io_bench::do_write(void)
 					errx(1, "write");
 				}
 			}
+#endif
+
 			++op_it;
 			if (count >= ops_cap)
 				break;
@@ -499,7 +550,11 @@ void io_bench::do_write(void)
 		printf("Fsync at: %ld\n", real_time.tv_sec);
 #endif
 		time_stats_start(&fsync_time);
+#ifdef UFS
+		fs_fsync(fd);
+#else
 		fsync(fd);
+#endif
 		time_stats_stop(&fsync_time);
 	}
 
@@ -560,7 +615,11 @@ void io_bench::do_read(void)
 				memset(buf, 0, io_size);
 
 #endif
+#ifdef UFS
+				ret = fs_allocated_read(fd, buf, io_size);
+#else
 				ret = read(fd, buf, io_size);
+#endif
 #if 0
 			    if (ret != io_size) {
 				    printf("read size mismatch: return %d, request %lu\n",
@@ -604,8 +663,14 @@ void io_bench::do_read(void)
                 else
                         io_size = io_size;
         */
-
+#ifdef UFS
+				if (next_hit == 1)
+					ret = fs_cpc_pread(fd, buf, io_size, it);
+				else
+					ret = fs_allocated_pread(fd, buf, io_size, it);
+#else
 				ret = pread(fd, buf, io_size, it);
+#endif
 				if (count >= ops_cap)
 					break;
 			}
@@ -671,7 +736,12 @@ void io_bench::cleanup(void)
 		fsync(fd);
 		sync();
 	}
+
+#ifdef UFS
+	fs_close(fd);
+#else
 	close(fd);
+#endif
 
 #if 0
 	if (test_type == SEQ_READ || test_type == RAND_READ) {
@@ -892,6 +962,15 @@ int main(int argc, char *argv[])
 	double aggr_tput;
 #ifdef PROFILE_CPU_UTILIZATION
 	struct timespec real_time;
+#endif
+
+#ifdef UFS
+	num_worker = atoi(getenv("NUM_WORKER"));
+	cache_hit = atoi(getenv("CACHE_HIT"));
+	if (fs_init_multi(num_worker, k) < 0)
+		exit(1);
+	dummy = fs_malloc(1024);
+	fs_free((void*) dummy);
 #endif
 
 	device_id = getenv("FILE_ID");

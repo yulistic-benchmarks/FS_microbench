@@ -29,6 +29,15 @@ const char *test_dir_prefix = "./pmem";
 
 char *test_file_name = "testfile";
 
+#ifdef UFS
+#include "fsapi.h"
+const int k[] = {20190302, 20190322, 20190342, 20190362, 20190382, 20190402, 20190422, 20190442, 20190462, 20190482};
+int num_worker; // fs_server # of workers
+int cache_hit;
+int next_hit = 0;
+volatile void* dummy;
+#endif
+
 unsigned long ops_cap;
 int do_fsync;
 int remote;
@@ -145,14 +154,30 @@ void io_bench::prepare(void)
 		for (unsigned long i = 0; i < BUF_SIZE; i++)
 			buf[i] = 1;
 
+#ifdef UFS
+		int hash = atoi(test_file.c_str() + strlen(test_file.c_str()) - 2);
+		next_hit = hash < cache_hit;
+
+		if ((fd = fs_open(test_file.c_str(),O_RDWR, 0666)) < 0)
+			err(1, "open");
+#else
 		if ((fd = open(test_file.c_str(), O_RDWR)) < 0)
 			err(1, "open");
+#endif
 	} else {
 		for (unsigned long i = 0; i < BUF_SIZE; i++)
 			buf[i] = '0' + (i % 10);
 
+#ifdef UFS
+		int hash = atoi(test_file.c_str() + strlen(test_file.c_str()) - 2);
+		next_hit = hash < cache_hit;
+
+		fd = fs_open(test_file.c_str(), O_RDWR | O_CREAT | O_TRUNC,
+			  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+#else
 		fd = open(test_file.c_str(), O_RDWR | O_CREAT | O_TRUNC,
 			  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+#endif
 
 		// fd = open(test_file.c_str(), O_RDWR | O_CREAT, 0775);
 		// FILE *file = fopen(test_file.c_str(), "w");
@@ -245,7 +270,11 @@ void io_bench::do_write(void)
 			bytes_written = write(fd, buf, size);
 			if (do_fsync) {
 				time_stats_start(&fstats);
+#ifdef UFS
+				fs_fsync(fd);
+#else
 				fsync(fd);
+#endif
 				time_stats_stop(&fstats);
 			}
 
@@ -274,11 +303,19 @@ void io_bench::do_write(void)
 			else
 				size = io_size;
 
+#ifdef UFS
+			fs_lseek(fd, it, SEEK_SET);
+#else
 			lseek(fd, it, SEEK_SET);
+#endif
 
 			time_stats_start(&iostats);
 
+#ifdef UFS
+			bytes_written = fs_allocated_write(fd, buf, size);
+#else
 			bytes_written = write(fd, buf, size);
+#endif
 			if (bytes_written != size) {
 				printf("write request %u received len %d\n",
 				       size, bytes_written);
@@ -286,7 +323,11 @@ void io_bench::do_write(void)
 			}
 			if (do_fsync) {
 				time_stats_start(&fstats);
+#ifdef UFS
+				fs_fsync(fd);
+#else
 				fsync(fd);
+#endif
 				time_stats_stop(&fstats);
 			}
 
@@ -332,7 +373,11 @@ void io_bench::do_read(void)
 
 #endif
 			time_stats_start(&iostats);
+#ifdef UFS
+			ret = fs_allocated_read(fd, buf, size);
+#else
 			ret = read(fd, buf, size);
+#endif
 			time_stats_stop(&iostats);
 #if 0
 			if (ret != size) {
@@ -367,8 +412,14 @@ void io_bench::do_read(void)
 
 			time_stats_start(&iostats);
 
+#ifdef UFS
+			if (next_hit == 1)
+				ret = fs_cpc_pread(fd, buf, io_size, it);
+			else
+				ret = fs_allocated_pread(fd, buf, io_size, it);
+#else
 			ret = pread(fd, buf, size, it);
-
+#endif
 			time_stats_stop(&iostats);
 
 			count++;
@@ -403,14 +454,22 @@ void io_bench::Run(void)
 		this->do_write();
 	}
 
+#ifdef UFS
+	fs_lseek(fd, 0, SEEK_SET);
+#else
 	lseek(fd, 0, SEEK_SET);
+#endif
 
 	if (test_type == SEQ_WRITE_READ) {
 		// io_size = 128;
 		// ops_cap = file_size_bytes / io_size;
 		for (int i = 0; i < 4; i++) {
 			this->do_read();
+#ifdef UFS
+			fs_lseek(fd, 0, SEEK_SET);
+#else
 			lseek(fd, 0, SEEK_SET);
+#endif
 		}
 	}
 
@@ -424,12 +483,22 @@ void io_bench::Run(void)
 void io_bench::cleanup(void)
 {
 	if (test_type == SEQ_WRITE || test_type == RAND_WRITE) {
+#ifdef UFS
+		fs_unlink(test_file.c_str());
+		fs_fsync(fd);
+#else
 		unlink(test_file.c_str());
 		fsync(fd);
+#endif
 	}
 	if (test_type == TOUCH_TRUNC)
 		sync();
+
+#ifdef UFS
+	fs_close(fd);
+#else
 	close(fd);
+#endif
 
 #if 0
 	if (test_type == SEQ_READ || test_type == RAND_READ) {
@@ -610,6 +679,15 @@ int main(int argc, char *argv[])
 	ops_cap = 0;
 	do_fsync = 0;
 	remote = 0;
+
+#ifdef UFS
+	num_worker = atoi(getenv("NUM_WORKER"));
+	cache_hit = atoi(getenv("CACHE_HIT"));
+	if (fs_init_multi(num_worker, k) < 0)
+		exit(1);
+	dummy = fs_malloc(1024);
+	fs_free((void*) dummy);
+#endif
 
 	argc = process_opt_args(argc, argv);
 
