@@ -1,9 +1,11 @@
 #!/bin/bash
+source scripts/common.sh
+
 # Default configurations #################
 BENCH_MICRO="./"                                  # Set proper path.
 DIRS="/mnt/ext4/ext4_journal /mnt/zj/zj_journal " # Basename is used as a bench run name. Use different name. Ex) /mnt/ext4/text_ext4 --> text_ext4 is name.
 OPS="rw sw sr rr"                                 # Ex: "rw sw sr rr"
-TOTAL_WRITE_SIZE=$((1024 * 1024 * 1024))
+TOTAL_WRITE_SIZE=$((30 * 1024)) # in MB.
 IO_SIZES="4K 16K 64K 1M" # Ex: "1K 4K 16K 64K 1M"
 NUM_THREADS="1"          # Ex: "1 16 4 1"
 PROFILE_CPU_UTILIZATION=0
@@ -21,11 +23,6 @@ if [ "$PROFILE_CPU_UTILIZATION" = "1" ]; then
 		exit 1
 	}
 fi
-
-dropCache() {
-	{ echo 3 | sudo tee /proc/sys/vm/drop_caches; } &>/dev/null
-	sleep 3
-}
 
 fixCPUFreq() {
 	## Lock CPU frequency.
@@ -63,15 +60,14 @@ loopMicroTput() {
 					echo "Remove (re-create) existing files."
 					if [ $OP = "sr" ] || [ $OP = "rr" ]; then
 						# Remove the existing files and create them again. Otherwise, the file sizes might be different.
-						rm -rf $DIR/*
+						sudo rm -rf $DIR/*
 						$PINNING $BENCH_MICRO/build/tput_micro -d $DIR -s sw ${FILE_SIZE}M $IO_SIZE $NUM_THREAD
 					else
 						# Remove existing files. Otherwise, the file size might be different.
-						rm -rf $DIR/*
+						sudo rm -rf $DIR/*
 					fi
 
-					echo "Dropping cache."
-					dropCache
+					flushCache
 
 					if [ "$PROFILE_CPU_UTILIZATION" = "1" ]; then
 						#OUT_CPU_FILE=${OUT_FILE}.cpu
@@ -82,10 +78,11 @@ loopMicroTput() {
 
 						# Use perf.
 						OUT_CPU_FILE=${OUT_FILE}.perfdata
-						# PERF_PREFIX="sudo -E $PERF_BIN record -a -o $OUT_CPU_FILE --"
-						PERF_PREFIX="sudo $PERF_BIN record -a -o $OUT_CPU_FILE --"
+						PERF_PREFIX="sudo -E bash -c \" $PERF_BIN record -a -o $OUT_CPU_FILE --"
+						PERF_SUFFIX=" \" "
 					else
 						PERF_PREFIX=""
+						PERF_SUFFIX=""
 					fi
 
 					# Print mount state.

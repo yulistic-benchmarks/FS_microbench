@@ -1,6 +1,7 @@
 #!/bin/bash
 # Main function for FS_microbench.
 # set -ex
+source scripts/common.sh
 
 # Parse command line options
 while getopts "lt" opt; do
@@ -62,6 +63,11 @@ umountFS() {
 	sudo umount $MOUNT_PATH || true
 }
 
+###### File system specific reset function. It is called before each benchmark run.
+flushCache() {
+	dropCache
+}
+
 ###### File system specific main function. Should be declared.
 runFileSystemSpecific() {
 	echo "Ext4 main function."
@@ -70,16 +76,16 @@ runFileSystemSpecific() {
 	sudo dumpe2fs -h $DEV_PATH >${OUT_FILE}.fsconf
 
 	if [ "$BENCHMARK_TYPE" = "throughput" ]; then
-		CMD="$PERF_PREFIX $PINNING $BENCH_MICRO/build/tput_micro -d $DIR -s $OP ${FILE_SIZE}M $IO_SIZE $NUM_THREAD"
+		CMD="$PERF_PREFIX $PINNING $BENCH_MICRO/build/tput_micro -d $DIR -s $OP ${FILE_SIZE}M $IO_SIZE $NUM_THREAD $PERF_SUFFIX"
 	else
-		CMD="$PERF_PREFIX $PINNING $BENCH_MICRO/build/lat_micro -d $DIR -s $OP ${FILE_SIZE}M $IO_SIZE 1"
+		CMD="$PERF_PREFIX $PINNING $BENCH_MICRO/build/lat_micro -d $DIR -s $OP ${FILE_SIZE}M $IO_SIZE 1 $PERF_SUFFIX"
 	fi
 
 	# Print command.
 	echo Command: "$CMD" | tee ${OUT_FILE}.out
 
 	# Execute
-	$CMD | tee -a ${OUT_FILE}.out
+	eval $CMD | tee -a ${OUT_FILE}.out
 }
 
 runBenchmark() {

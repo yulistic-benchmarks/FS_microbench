@@ -21,6 +21,7 @@ getTputMicroCmd() {
 			op=$(echo "$cmd_opt" | cut -d" " -f4)
 			file_size=$(echo "$cmd_opt" | cut -d" " -f5 | cut -d"M" -f1)
 			io_size=$(echo "$cmd_opt" | cut -d" " -f6)
+			io_size=$(numfmt --from=iec $io_size)
 			thread_num=$(echo "$cmd_opt" | cut -d" " -f7)
 
 			echo -n "$op,$file_size,$io_size,$thread_num,"
@@ -171,6 +172,7 @@ getLatMicroCmd() {
 			op=$(echo "$cmd_opt" | cut -d" " -f4)
 			file_size=$(echo "$cmd_opt" | cut -d" " -f5 | cut -d"M" -f1)
 			io_size=$(echo "$cmd_opt" | cut -d" " -f6)
+			io_size=$(numfmt --from=iec $io_size)
 			thread_num=$(echo "$cmd_opt" | cut -d" " -f7)
 
 			echo -n "$op,$file_size,$io_size,$thread_num,"
@@ -218,9 +220,24 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 
 	for dir in $1/*; do
 		if [ $(basename $dir) = "tput" ]; then
-			parseMicroTput $dir
+			parseMicroTput $dir > tput_result.txt
+
+			# Sort and print.
+			cat tput_result.txt | head -n 3
+			cat tput_result.txt | tail -n +4 | sort -t, -k2,2 -k1,1 -k4,4n -k5,5n
+			rm tput_result.txt
+
+
 		elif [ $(basename $dir) = "lat" ]; then
-			parseMicroLat $dir
+			parseMicroLat $dir > lat_result.txt
+
+			# Sort and print.
+			cat lat_result.txt | head -n 2
+			cat lat_result.txt | tail -n +3 | sort -t, -k2,2 -k1,1 -k4,4n
+			rm lat_result.txt
+
 		fi
 	done
+
+
 fi

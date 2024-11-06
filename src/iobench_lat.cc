@@ -423,10 +423,10 @@ void io_bench::Run(void)
 
 void io_bench::cleanup(void)
 {
-	if (test_type == SEQ_WRITE || test_type == RAND_WRITE) {
-		unlink(test_file.c_str());
-		fsync(fd);
-	}
+	// if (test_type == SEQ_WRITE || test_type == RAND_WRITE) {
+	//         unlink(test_file.c_str());
+	//         fsync(fd);
+	// }
 	if (test_type == TOUCH_TRUNC)
 		sync();
 	close(fd);
