@@ -95,7 +95,7 @@ runBenchmark() {
 	DIRS="$MOUNT_PATH/ext4_journal" # Overriding config.
 
 	# Configure and mount file system.
-	sudo mke2fs -t ext4 -J size=$TOTAL_JOURNAL_SIZE -F -G 1 $DEV_PATH
+	sudo mke2fs -t ext4 -J size=$TOTAL_JOURNAL_SIZE -E lazy_itable_init=0,lazy_journal_init=0 -F -G 1 $DEV_PATH
 	sudo mount -t ext4 -o data=journal $DEV_PATH $MOUNT_PATH
 	sudo chown -R $USER:$USER $MOUNT_PATH
 	mkdir -p $DIRS
@@ -110,7 +110,7 @@ runBenchmark() {
 
 	# Run data=ordered mode
 	DIRS="$MOUNT_PATH/ext4_ordered" # Overriding config.
-	sudo mke2fs -t ext4 -J size=$TOTAL_JOURNAL_SIZE -F -G 1 $DEV_PATH
+	sudo mke2fs -t ext4 -J size=$TOTAL_JOURNAL_SIZE -E lazy_itable_init=0,lazy_journal_init=0 -F -G 1 $DEV_PATH
 	sudo mount -t ext4 $DEV_PATH $MOUNT_PATH
 	sudo chown -R $USER:$USER $MOUNT_PATH
 	mkdir -p $DIRS
