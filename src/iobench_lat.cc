@@ -33,6 +33,8 @@ unsigned long ops_cap;
 int do_fsync;
 int remote;
 
+#define PRINT_PROGRESS
+
 #define ALIGN_MASK(x, mask) (((x) + (mask)) & ~(mask))
 #define ALIGN(x, a) ALIGN_MASK((x), ((__typeof__(x))(a)-1))
 #define BUF_SIZE (2 << 20)
@@ -90,6 +92,8 @@ class io_bench : public CThread {
 	static test_mode_t get_test_mode(char *);
 	static void hexdump(void *mem, unsigned int len);
 	static void show_usage(const char *prog);
+
+	void print_progress(int count, int total_ops);
 };
 
 io_bench::io_bench(int _id, unsigned long _file_size_bytes,
@@ -258,6 +262,7 @@ void io_bench::do_write(void)
 			// }
 
 			count++;
+			print_progress(count, ops_cap);
 			if (count >= ops_cap)
 				break;
 
@@ -293,6 +298,7 @@ void io_bench::do_write(void)
 			time_stats_stop(&iostats);
 
 			count++;
+			print_progress(count, ops_cap);
 			if (count >= ops_cap)
 				break;
 		}
@@ -355,6 +361,7 @@ void io_bench::do_read(void)
 			}
 #endif
 			count++;
+			print_progress(count, ops_cap);
 			if (count >= ops_cap)
 				break;
 		}
@@ -372,6 +379,7 @@ void io_bench::do_read(void)
 			time_stats_stop(&iostats);
 
 			count++;
+			print_progress(count, ops_cap);
 			if (count >= ops_cap)
 				break;
 		}
@@ -679,4 +687,18 @@ int main(int argc, char *argv[])
 	fflush(stderr);
 
 	return 0;
+}
+
+void io_bench::print_progress(int count, int total_ops) {
+#ifdef PRINT_PROGRESS
+    static int last_percentage = -1;
+    int current_percentage = (count * 100) / total_ops;
+
+    // Print every 10% increase
+    if (current_percentage / 10 > last_percentage / 10) {
+        printf("[Thread %d] Progress: %d%%\n", id, current_percentage);
+        fflush(stdout);  // Ensure output is displayed immediately
+        last_percentage = current_percentage;
+    }
+#endif
 }

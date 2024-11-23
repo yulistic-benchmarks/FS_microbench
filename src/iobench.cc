@@ -57,6 +57,8 @@ char *test_file_name = "testfile";
 #define ALIGN_FLOOR(x, a) ALIGN_MASK_FLOOR((x), ((__typeof__(x))(a)-1))
 #define BUF_SIZE (2 << 20)
 
+#define PRINT_PROGRESS
+
 // #define ODIRECT
 #undef ODIRECT
 // #define VERIFY
@@ -121,6 +123,7 @@ class io_bench : public CThread {
 	static test_mode_t get_test_mode(char *);
 	static void hexdump(void *mem, unsigned int len);
 	static void show_usage(const char *prog);
+	void print_progress(int count, int total_ops);
 };
 
 io_bench::io_bench(int _id, unsigned long _file_size_bytes,
@@ -431,6 +434,7 @@ void io_bench::do_write(void)
 					count = 0;
 					break;
 				}
+				print_progress(count, ops_cap);
 			}
 #ifdef RUN_INF
 		}
@@ -463,6 +467,7 @@ void io_bench::do_write(void)
 					cout << "write done." << endl;
 					break;
 				}
+				print_progress(count, ops_cap);
 			}
 #ifdef RUN_INF
 		}
@@ -490,6 +495,7 @@ void io_bench::do_write(void)
 			++op_it;
 			if (count >= ops_cap)
 				break;
+			print_progress(count, ops_cap);
 		}
 	}
 
@@ -586,6 +592,7 @@ void io_bench::do_read(void)
 					cout << "read done." << endl;
 					break;
 				}
+				print_progress(count, ops_cap);
 			}
 #ifdef RUN_INF
 		}
@@ -608,6 +615,7 @@ void io_bench::do_read(void)
 				ret = pread(fd, buf, io_size, it);
 				if (count >= ops_cap)
 					break;
+				print_progress(count, ops_cap);
 			}
 #ifdef RUN_INF
 		}
@@ -1043,4 +1051,18 @@ int main(int argc, char *argv[])
 	fflush(stderr);
 
 	return 0;
+}
+
+void io_bench::print_progress(int count, int total_ops) {
+#ifdef PRINT_PROGRESS
+    static int last_percentage = -1;
+    int current_percentage = (count * 100) / total_ops;
+    
+    // Print every 10% increase
+    if (current_percentage / 10 > last_percentage / 10) {
+        printf("[Thread %d] Progress: %d%%\n", id, current_percentage);
+        fflush(stdout);  // Ensure output is displayed immediately
+        last_percentage = current_percentage;
+    }
+#endif
 }

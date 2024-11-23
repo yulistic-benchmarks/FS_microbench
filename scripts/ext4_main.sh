@@ -32,6 +32,7 @@ if [ "$BENCHMARK_TYPE" = "throughput" ]; then
 	TOTAL_WRITE_SIZE=$((30 * 1024)) # in MB
 	IO_SIZES="4K 16K 64K 1M"
 	NUM_THREADS="1 2 4 8 16"
+	# PINNING=""
 	###############################################################################
 else
 	source scripts/run_lat_all.sh || {
@@ -43,6 +44,7 @@ else
 	OPS="sw rw sr rr"
 	TOTAL_WRITE_SIZE=$((1024)) # in MB
 	IO_SIZES="4K 16K 64K 1M"
+	# PINNING=""
 	###############################################################################
 fi
 
@@ -96,7 +98,7 @@ runBenchmark() {
 
 	# Configure and mount file system.
 	sudo mke2fs -t ext4 -J size=$TOTAL_JOURNAL_SIZE -E lazy_itable_init=0,lazy_journal_init=0 -F -G 1 $DEV_PATH
-	sudo mount -t ext4 -o data=journal $DEV_PATH $MOUNT_PATH
+	sudo mount -t ext4 -o barrier=0,data=journal $DEV_PATH $MOUNT_PATH
 	sudo chown -R $USER:$USER $MOUNT_PATH
 	mkdir -p $DIRS
 
@@ -111,7 +113,7 @@ runBenchmark() {
 	# Run data=ordered mode
 	DIRS="$MOUNT_PATH/ext4_ordered" # Overriding config.
 	sudo mke2fs -t ext4 -J size=$TOTAL_JOURNAL_SIZE -E lazy_itable_init=0,lazy_journal_init=0 -F -G 1 $DEV_PATH
-	sudo mount -t ext4 $DEV_PATH $MOUNT_PATH
+	sudo mount -t ext4 -o barrier=0 $DEV_PATH $MOUNT_PATH
 	sudo chown -R $USER:$USER $MOUNT_PATH
 	mkdir -p $DIRS
 
