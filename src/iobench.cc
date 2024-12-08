@@ -59,6 +59,8 @@ char *test_file_name = "testfile";
 
 #define PRINT_PROGRESS
 
+// #define PRIVATE_DIR
+
 // #define ODIRECT
 #undef ODIRECT
 // #define VERIFY
@@ -133,14 +135,16 @@ io_bench::io_bench(int _id, unsigned long _file_size_bytes,
 {
 	test_file.assign(test_dir_prefix);
 
+#ifdef PRIVATE_DIR
 	// Private dir
 	test_file += "/" + std::to_string(id) + "/" +
 		     std::string(test_file_name) + std::to_string(0) + "-" +
 		     std::to_string(dev_id) + "-" + std::to_string(id);
-
+#else
 	// Shared dir
-	// test_file += "/" + std::string(test_file_name) + std::to_string(0) + "-" +
-	//              std::to_string(dev_id) + "-" + std::to_string(id);
+	test_file += "/" + std::string(test_file_name) + std::to_string(0) + "-" +
+	             std::to_string(dev_id) + "-" + std::to_string(id);
+#endif
 	per_thread_stats = 0;
 }
 
@@ -220,6 +224,7 @@ void io_bench::prepare(void)
 
 	// ret = mkdir(test_dir_prefix, 0777);
 
+#ifdef PRIVATE_DIR
 	// Private dir
 	string prefix = test_dir_prefix;
 	string subdir_s = prefix + "/" + std::to_string(id);
@@ -228,6 +233,7 @@ void io_bench::prepare(void)
 	if (ret < 0 && errno != EEXIST && ret != -EEXIST) {
 		exit(-1);
 	}
+#endif
 
 #ifdef ODIRECT
 	ret = posix_memalign((void **)&buf, 4096, BUF_SIZE);

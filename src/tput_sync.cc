@@ -65,6 +65,8 @@ char *test_file_name = "testfile";
 #undef ODIRECT
 // #define VERIFY
 
+#define FSYNC_VERIFY  // Uncomment to enable fsync call verification
+
 typedef enum {
 	TOUCH_TRUNC,
 	SEQ_WRITE,
@@ -88,6 +90,7 @@ unsigned long ops_cap;
 int psync; // process barrier
 int wait_signal;
 int do_fsync;
+int fsync_interval = 0;  // Number of writes before fsync, 0 means no intermediate fsyncs
 // static unsigned int *shm_proc_inf; // Keep running infinitely.
 
 class io_bench : public CThread {
@@ -347,8 +350,12 @@ void io_bench::do_write(void)
 {
 	int bytes_written;
 	unsigned long random_range;
-	uint32_t count = 0;
+	uint64_t count = 0;
 	struct time_stats fsync_time;
+	uint64_t fsync_count = 0;  // Expected fsync count
+#ifdef FSYNC_VERIFY
+	uint64_t actual_fsync_count = 0;  // Actual number of fsyncs performed
+#endif
 #ifdef PROFILE_CPU_UTILIZATION
 	struct timespec real_time;
 #endif
@@ -371,8 +378,13 @@ void io_bench::do_write(void)
 	// 	return;
 	// }
 
-	time_stats_init(&fsync_time, 1);
-	cout << "# of ops: " << ops_cap << endl;
+	fsync_count = ops_cap / fsync_interval;
+	if (ops_cap % fsync_interval)
+		fsync_count++; /* The last fsync */
+
+	time_stats_init(&fsync_time, fsync_count);
+	cout << "# of ops: " << ops_cap << ", # of fsyncs: " << fsync_count
+	     << " (every " << fsync_interval << " writes)" << endl;
 
 	if (test_type == SEQ_WRITE || test_type == TOUCH_TRUNC) {
 		unsigned int _io_size = io_size;
@@ -425,6 +437,18 @@ void io_bench::do_write(void)
 					errx(1, "write");
 				}
 
+				print_progress(count, ops_cap);
+
+				// Add fsync at configured intervals
+				if (fsync_interval > 0 && count % fsync_interval == 0) {
+					time_stats_start(&fsync_time);
+					fsync(fd);
+					time_stats_stop(&fsync_time);
+#ifdef FSYNC_VERIFY
+					actual_fsync_count++;
+#endif
+				}
+
 				if (count >= ops_cap) {
 					cout << "write done." << endl;
 #if defined(RUN_INF) & !defined(RUN_N_TIMES)
@@ -440,7 +464,6 @@ void io_bench::do_write(void)
 					count = 0;
 					break;
 				}
-				print_progress(count, ops_cap);
 			}
 #ifdef RUN_INF
 		}
@@ -469,11 +492,21 @@ void io_bench::do_write(void)
 					       _io_size, bytes_written);
 					errx(1, "write");
 				}
+				print_progress(count, ops_cap);
+
+				// Add fsync at configured intervals
+				if (fsync_interval > 0 && count % fsync_interval == 0) {
+					time_stats_start(&fsync_time);
+					fsync(fd);
+					time_stats_stop(&fsync_time);
+#ifdef FSYNC_VERIFY
+					actual_fsync_count++;
+#endif
+				}
 				if (count >= ops_cap) {
 					cout << "write done." << endl;
 					break;
 				}
-				print_progress(count, ops_cap);
 			}
 #ifdef RUN_INF
 		}
@@ -499,13 +532,23 @@ void io_bench::do_write(void)
 				}
 			}
 			++op_it;
+			print_progress(count, ops_cap);
+
+			// Add fsync at configured intervals
+			if (fsync_interval > 0 && count % fsync_interval == 0) {
+				time_stats_start(&fsync_time);
+				fsync(fd);
+				time_stats_stop(&fsync_time);
+#ifdef FSYNC_VERIFY
+				actual_fsync_count++;
+#endif
+			}
 			if (count >= ops_cap)
 				break;
-			print_progress(count, ops_cap);
 		}
 	}
 
-	if (do_fsync) {
+	if (do_fsync && count % fsync_interval != 0) {
 #ifdef PROFILE_CPU_UTILIZATION
 		clock_gettime(CLOCK_REALTIME, &real_time);
 		printf("Fsync at: %ld\n", real_time.tv_sec);
@@ -513,28 +556,36 @@ void io_bench::do_write(void)
 		time_stats_start(&fsync_time);
 		fsync(fd);
 		time_stats_stop(&fsync_time);
+#ifdef FSYNC_VERIFY
+		actual_fsync_count++;
+#endif
 	}
 
 	if (per_thread_stats) {
 		time_stats_stop(&stats);
 
+#ifdef FSYNC_VERIFY
+		printf("Fsync calls: %lu (actual: %lu)\n", fsync_count, actual_fsync_count);
+#else
+		printf("Fsync calls: %lu\n", fsync_count);
+#endif
 		printf("(FSYNC)LATENCY: %.3f msec\n",
-		       (double)time_stats_get_avg(&fsync_time) * 1000.0);
+			   (double)time_stats_get_avg(&fsync_time) * 1000.0);
 		printf("(FSYNC)Throughput: %3.3f MB\n",
-		       ((double)file_size_bytes) /
-			       (1024.0 * 1024.0 *
-				(double)time_stats_get_avg(&fsync_time)));
+			   ((double)file_size_bytes) /
+				   (1024.0 * 1024.0 *
+					(double)time_stats_get_avg(&fsync_time)));
 
 #ifdef RUN_N_TIMES
 		printf("Throughput: %3.3f MB\n",
-		       ((double)file_size_bytes * cnt_max) /
-			       (1024.0 * 1024.0 *
-				(double)time_stats_get_avg(&stats)));
+			   ((double)file_size_bytes * cnt_max) /
+				   (1024.0 * 1024.0 *
+					(double)time_stats_get_avg(&stats)));
 #else
 		printf("(AGGREGATE)Throughput: %3.3f MB\n",
-		       ((double)file_size_bytes) /
-			       (1024.0 * 1024.0 *
-				(double)time_stats_get_avg(&stats)));
+			   ((double)file_size_bytes) /
+				   (1024.0 * 1024.0 *
+					(double)time_stats_get_avg(&stats)));
 #endif
 	}
 
@@ -645,9 +696,9 @@ void io_bench::do_read(void)
 		// printf("%f\n", (double) time_stats_get_avg(&stats));
 
 		printf("(AGGREGATE)Throughput: %3.3f MB\n",
-		       ((double)file_size_bytes) /
-			       (1024.0 * 1024.0 *
-				(double)time_stats_get_avg(&stats)));
+			   ((double)file_size_bytes) /
+				   (1024.0 * 1024.0 *
+					(double)time_stats_get_avg(&stats)));
 	}
 
 	return;
@@ -817,7 +868,7 @@ void io_bench::show_usage(const char *prog)
 	std::cerr
 		<< "usage: " << prog
 		<< " [-d <directory>] [-f <file-prefix>] [-n <# of ops>] [-s "
-		   "'fsync'] <wr/sr/sw/rr/rw/zr/zw/zm>"
+		   "'fsync'] [-i <fsync interval:call after every X writes>] <wr/sr/sw/rr/rw/zr/zw/zm>"
 		<< " <size: X{G,M,K,P}, eg: 100M> <IO size, e.g.: 4K> <# of thread>"
 		<< endl;
 }
@@ -885,6 +936,11 @@ restart:
 			wait_signal = 1;
 			dash_d = i;
 			argc = adjust_args(dash_d, argv, argc, 1);
+			goto restart;
+		} else if (strncmp("-i", argv[i], 2) == 0) {
+			fsync_interval = atoi(argv[i + 1]);
+			dash_d = i;
+			argc = adjust_args(dash_d, argv, argc, 2);
 			goto restart;
 		}
 	}
