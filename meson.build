@@ -31,6 +31,8 @@ common_srcs = files(['src/thread.cc', 'src/time_stat.c'])
 tput_bench_srcs = files(['src/iobench.cc']) + common_srcs
 lat_bench_srcs = files(['src/iobench_lat.cc']) + common_srcs
 tput_sync_srcs = files(['src/tput_sync.cc']) + common_srcs
+tput_sync_interval_srcs = files(['src/tput_sync_interval.cc']) + common_srcs
+file_gen_srcs = files(['src/file_gen.cc']) + common_srcs
 
 tput_exe = executable('tput_micro',
 tput_bench_srcs, include_directories : [inc], dependencies : [thread_dep, rt_dep], c_args: ['-D_BSD_SOURCE'])
@@ -40,6 +42,12 @@ lat_bench_srcs, include_directories : [inc], dependencies : [thread_dep, rt_dep]
 
 tput_sync_exe = executable('tput_sync',
 tput_sync_srcs, include_directories : [inc], dependencies : [thread_dep, rt_dep], c_args: ['-D_BSD_SOURCE'])
+
+tput_sync_interval_exe = executable('tput_sync_interval',
+tput_sync_interval_srcs, include_directories : [inc], dependencies : [thread_dep, rt_dep], c_args: ['-D_BSD_SOURCE'])
+
+file_gen_exe = executable('file_gen',
+file_gen_srcs, include_directories : [inc], dependencies : [thread_dep, rt_dep], c_args: ['-D_BSD_SOURCE'])
 
 #mkfs_srcs = ['src/mkfs/mkfs.c', 'lib/log.c/src/log.c']
 #mkfs_exe = executable('mkfs',

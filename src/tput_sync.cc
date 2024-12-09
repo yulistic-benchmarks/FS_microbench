@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <climits>
 #include <ctype.h>
 #include <err.h>
 #include <errno.h>
@@ -90,7 +91,7 @@ unsigned long ops_cap;
 int psync; // process barrier
 int wait_signal;
 int do_fsync;
-int fsync_interval = 0;  // Number of writes before fsync, 0 means no intermediate fsyncs
+int fsync_interval = INT_MAX;  // Number of writes before fsync, INT_MAX means effectively no intermediate fsyncs
 // static unsigned int *shm_proc_inf; // Keep running infinitely.
 
 class io_bench : public CThread {
@@ -548,7 +549,8 @@ void io_bench::do_write(void)
 		}
 	}
 
-	if (do_fsync && count % fsync_interval != 0) {
+	// if (do_fsync && count % fsync_interval != 0) {
+	if (do_fsync) {
 #ifdef PROFILE_CPU_UTILIZATION
 		clock_gettime(CLOCK_REALTIME, &real_time);
 		printf("Fsync at: %ld\n", real_time.tv_sec);
