@@ -23,6 +23,8 @@
 #include <unistd.h>
 #include <vector>
 #include <chrono>
+#include <atomic>
+#include <signal.h>
 
 #if 0
 #include <boost/math/distributions/pareto.hpp>
@@ -97,6 +99,20 @@ int do_fsync;
 int fsync_interval = INT_MAX;  // Milliseconds between fsyncs, INT_MAX means effectively no intermediate fsyncs
 // static unsigned int *shm_proc_inf; // Keep running infinitely.
 
+int runtime_seconds = 0;  // Runtime limit in seconds (0 means no limit)
+std::atomic<bool> should_stop{false};  // Flag to signal threads to stop
+
+#ifdef FSYNC_VERIFY
+static uint64_t actual_fsync_count = 0;  // Actual number of fsyncs performed
+#endif
+
+void signal_handler(int signum) {
+    if (signum == SIGALRM) {
+        should_stop.store(true);
+        printf("\nTime limit reached. Stopping all threads...\n");
+    }
+}
+
 class io_bench : public CThread {
     public:
 	io_bench(int _id, unsigned long _file_size_bytes, unsigned int _io_size,
@@ -116,6 +132,8 @@ class io_bench : public CThread {
 
 	pthread_cond_t cv;
 	pthread_mutex_t cv_mutex;
+
+	unsigned long total_bytes_written;
 
 	void prepare(void);
 	void cleanup(void);
@@ -138,7 +156,7 @@ class io_bench : public CThread {
 io_bench::io_bench(int _id, unsigned long _file_size_bytes,
 		   unsigned int _io_size, test_t _test_type, string _zipf_file)
 	: id(_id), file_size_bytes(_file_size_bytes), io_size(_io_size),
-	  test_type(_test_type), zipf_file(_zipf_file)
+	  test_type(_test_type), zipf_file(_zipf_file), total_bytes_written(0)
 {
 	test_file.assign(test_dir_prefix);
 
@@ -388,37 +406,30 @@ void io_bench::do_write(void)
 
 	time_stats_init(&fsync_time, fsync_count);
 	cout << "# of ops: " << ops_cap << ", # of fsyncs: " << fsync_count
-	     << " (every " << fsync_interval << " writes)" << endl;
+	     << " (every " << fsync_interval << " milliseconds)" << endl;
 
-	// 마지막 fsync 시간을 추적하기 위한 변수 추가
+	// Track last fsync time
 	auto last_fsync_time = std::chrono::steady_clock::now();
 
 	if (test_type == SEQ_WRITE || test_type == TOUCH_TRUNC) {
 		unsigned int _io_size = io_size;
 
 #ifdef RUN_INF
-#ifdef RUN_N_TIMES
-		int cnt = 0;
-#endif
-		while (1) {
-#ifdef RUN_N_TIMES
-			if (cnt == cnt_max)
-				break;
-			cout << "tput_micro Run cnt=" << cnt
-			     << " ops=" << ops_cap << endl;
-			cnt++;
-#else
+		while (!should_stop) {
 			if (per_thread_stats) {
 				time_stats_init(&stats, 1);
 				time_stats_start(&stats);
 			}
-#endif
-			// reset offset.
+			
+			// reset offset
 			lseek(fd, 0, SEEK_SET);
-#endif
-
-			for (unsigned long i = 0; i < file_size_bytes;
-			     i += io_size) {
+			
+			for (unsigned long i = 0; i < file_size_bytes; i += io_size) {
+				if (should_stop) {
+					cout << "Thread " << id << " stopping due to time limit" << endl;
+					goto cleanup;
+				}
+				
 				count++;
 				if (i + io_size > file_size_bytes)
 					_io_size = file_size_bytes - i;
@@ -431,12 +442,7 @@ void io_bench::do_write(void)
 #endif
 
 				bytes_written = write(fd, buf, _io_size);
-
-#if 0
-			    if (do_fsync) {
-				    fsync(fd);
-			    }
-#endif
+				total_bytes_written += bytes_written;  // Accumulate total bytes written
 
 				if (bytes_written != io_size) {
 					printf("write request %u received len %d\n",
@@ -446,7 +452,7 @@ void io_bench::do_write(void)
 
 				print_progress(count, ops_cap);
 
-				// 시간 기반 fsync 체크
+				// Time-based fsync check
 				auto current_time = std::chrono::steady_clock::now();
 				auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
 					current_time - last_fsync_time).count();
@@ -454,6 +460,7 @@ void io_bench::do_write(void)
 				if (fsync_interval > 0 && elapsed >= fsync_interval) {
 					time_stats_start(&fsync_time);
 					auto fsync_start = std::chrono::steady_clock::now();
+					
 					fsync(fd);
 					auto fsync_end = std::chrono::steady_clock::now();
 					auto fsync_latency = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -468,7 +475,7 @@ void io_bench::do_write(void)
 				}
 
 				if (count >= ops_cap) {
-					cout << "write done." << endl;
+					// cout << "write done." << endl;
 #if defined(RUN_INF) & !defined(RUN_N_TIMES)
 					if (per_thread_stats) {
 							time_stats_stop(&stats);
@@ -485,17 +492,25 @@ void io_bench::do_write(void)
 					break;
 				}
 			}
-#ifdef RUN_INF
 		}
 #endif
 	} else if (test_type == RAND_WRITE || test_type == ZIPF_WRITE) {
 		unsigned int _io_size = io_size;
 #ifdef RUN_INF
-		while (1) {
-			// reset offset.
+		while (!should_stop) {
+			if (per_thread_stats) {
+				time_stats_init(&stats, 1);
+				time_stats_start(&stats);
+			}
+			
 			lseek(fd, 0, SEEK_SET);
-#endif
+			
 			for (auto it : io_list) {
+				if (should_stop) {
+					cout << "Thread " << id << " stopping due to time limit" << endl;
+					goto cleanup;
+				}
+				
 				count++;
 				/*
         if (it + io_size > file_size_bytes) {
@@ -507,6 +522,7 @@ void io_bench::do_write(void)
 
 				lseek(fd, it, SEEK_SET);
 				bytes_written = write(fd, buf, _io_size);
+				total_bytes_written += bytes_written;  // Accumulate total bytes written
 				if (bytes_written != _io_size) {
 					printf("write request %u received len %d\n",
 					       _io_size, bytes_written);
@@ -514,7 +530,7 @@ void io_bench::do_write(void)
 				}
 				print_progress(count, ops_cap);
 
-				// 시간 기반 fsync 체크
+				// Time-based fsync check
 				auto current_time = std::chrono::steady_clock::now();
 				auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
 					current_time - last_fsync_time).count();
@@ -535,11 +551,23 @@ void io_bench::do_write(void)
 					printf("[Thread %d] fsync latency: %.3f ms\n", id, fsync_latency / 1000.0);
 				}
 				if (count >= ops_cap) {
-					cout << "write done." << endl;
+					// cout << "write done." << endl;
+#if defined(RUN_INF) & !defined(RUN_N_TIMES)
+					if (per_thread_stats) {
+						time_stats_stop(&stats);
+
+						// time_stats_print(&stats, (char *)"---------------");
+
+						printf("Per Thread Throughput: %3.3f MB\n",
+						       (((double)file_size_bytes) /
+							(1024.0 * 1024.0 *
+							 (double)time_stats_get_avg(
+								 &stats))));
+					}
+#endif
 					break;
 				}
 			}
-#ifdef RUN_INF
 		}
 #endif
 	} else if (test_type == ZIPF_MIX) {
@@ -556,6 +584,7 @@ void io_bench::do_write(void)
 			// write
 			else {
 				bytes_written = write(fd, buf, _io_size);
+				total_bytes_written += bytes_written;  // Accumulate total bytes written
 				if (bytes_written != _io_size) {
 					printf("write request %u received len %d\n",
 					       _io_size, bytes_written);
@@ -565,7 +594,7 @@ void io_bench::do_write(void)
 			++op_it;
 			print_progress(count, ops_cap);
 
-			// 시간 기반 fsync 체크
+			// Time-based fsync check
 			if (*op_it == 1) {
 				auto current_time = std::chrono::steady_clock::now();
 				auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -637,6 +666,11 @@ void io_bench::do_write(void)
 				   (1024.0 * 1024.0 *
 					(double)time_stats_get_avg(&stats)));
 #endif
+	}
+
+cleanup:
+	if (should_stop) {
+		cout << "Thread " << id << " stopped due to time limit" << endl;
 	}
 
 	return;
@@ -728,16 +762,6 @@ void io_bench::do_read(void)
 		}
 #endif
 	}
-
-#if 0
-	for (unsigned long i = 0; i < file_size_bytes; i++) {
-		int bytes_read = read(fd, buf+i, io_size + 100);
-
-		if (bytes_read != io_size) {
-			printf("read too far: length %d\n", bytes_read);
-		}
-	}
-#endif
 
 	if (per_thread_stats) {
 		time_stats_stop(&stats);
@@ -992,6 +1016,11 @@ restart:
 			dash_d = i;
 			argc = adjust_args(dash_d, argv, argc, 2);
 			goto restart;
+		} else if (strncmp("-r", argv[i], 2) == 0) {
+			runtime_seconds = atoi(argv[i + 1]);
+			dash_d = i;
+			argc = adjust_args(dash_d, argv, argc, 2);
+			goto restart;
 		}
 	}
 
@@ -1108,6 +1137,13 @@ int main(int argc, char *argv[])
 #endif
 	time_stats_start(&main_stats);
 
+	// Set up signal handler for timer
+	if (runtime_seconds > 0) {
+		signal(SIGALRM, signal_handler);
+		printf("Setting runtime limit to %d seconds\n", runtime_seconds);
+		alarm(runtime_seconds);  // Set alarm to trigger after specified seconds
+	}
+
 	for (auto it : io_workers) {
 		it->Start();
 		// pthread_mutex_lock(&it->cv_mutex);
@@ -1158,6 +1194,20 @@ int main(int argc, char *argv[])
 	// printf("--------------------------------------------\n");
 
 	// time_stats_print(&total_stats, (char *)"----------- total stats");
+
+	// 총 write된 데이터 계산
+	unsigned long total_written = 0;
+	for (auto it : io_workers) {
+		total_written += it->total_bytes_written;
+	}
+
+	printf("Aggregated throughput: %3.3f MB\n", aggr_tput);
+	printf("Total data written: %lu bytes (%.2f GB)\n", 
+		   total_written, 
+		   (double)total_written / (1024.0 * 1024.0 * 1024.0));
+#ifdef FSYNC_VERIFY
+	printf("Total fsync calls: %lu\n", actual_fsync_count);
+#endif
 
 	fflush(stdout);
 	fflush(stderr);
