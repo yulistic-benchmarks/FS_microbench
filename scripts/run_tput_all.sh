@@ -15,7 +15,7 @@ TOTAL_WRITE_SIZE=$((30 * 1024)) # in MB.
 
 IO_SIZES="4K 16K 64K 1M" # Ex: "1K 4K 16K 64K 1M"
 NUM_THREADS="1"          # Ex: "1 16 4 1"
-PROFILE_CPU_UTILIZATION=0
+PROFILE_CPU_UTILIZATION=1
 # PINNING=""
 # PINNING="numactl -N 1 -m 1"
 # PINNING="numactl -N 0 -m 0"
@@ -92,7 +92,7 @@ loopMicroTput() {
 
 						# Use perf.
 						OUT_CPU_FILE=${OUT_FILE}.perfdata
-						PERF_PREFIX="sudo -E bash -c \" $PERF_BIN record -a -o $OUT_CPU_FILE --"
+						PERF_PREFIX="sudo -E bash -c \" $PERF_BIN -F 99 -e cycles record -a -o $OUT_CPU_FILE --"
 						PERF_SUFFIX=" \" "
 					else
 						PERF_PREFIX=""
