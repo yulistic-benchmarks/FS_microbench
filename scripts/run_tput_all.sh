@@ -5,15 +5,23 @@ source scripts/common.sh
 BENCH_MICRO="./"                                  # Set proper path.
 DIRS="/mnt/ext4/ext4_journal /mnt/zj/zj_journal " # Basename is used as a bench run name. Use different name. Ex) /mnt/ext4/text_ext4 --> text_ext4 is name.
 OPS="rw sw sr rr"                                 # Ex: "rw sw sr rr"
+
+# If you want to make total write size identical.
 TOTAL_WRITE_SIZE=$((30 * 1024)) # in MB.
+
+# If you want to make each file size identical. It will overwrite TOTAL_WRITE_SIZE.
+# PER_FILE_WRITE_SIZE=$((2 * 1024)) # in MB.
+
+
 IO_SIZES="4K 16K 64K 1M" # Ex: "1K 4K 16K 64K 1M"
 NUM_THREADS="1"          # Ex: "1 16 4 1"
 PROFILE_CPU_UTILIZATION=0
 # PINNING=""
-PINNING="numactl -N 1 -m 1"
+# PINNING="numactl -N 1 -m 1"
 # PINNING="numactl -N 0 -m 0"
 # PERF_BIN="perf" # Set correct perf bin path.
 PERF_BIN="/lib/modules/$(uname -r)/source/tools/perf/perf" # Set correct perf bin path.
+RM_FILES=1
 ##########################################
 
 # Check perf bin.
@@ -49,7 +57,11 @@ loopMicroTput() {
 			for OP in $OPS; do
 				for IO_SIZE in $IO_SIZES; do
 					# Set file size.
-					FILE_SIZE=$(($TOTAL_WRITE_SIZE / $NUM_THREAD)) # Round down.
+					if [ -n "$PER_FILE_WRITE_SIZE" ];then
+						FILE_SIZE=$PER_FILE_WRITE_SIZE
+					else
+						FILE_SIZE=$(($TOTAL_WRITE_SIZE / $NUM_THREAD)) # Round down.
+					fi
 
 					# Set output file path.
 					# OUT_DIR="$BENCH_MICRO/results/tput/dir${DIR_CNT}"
@@ -57,14 +69,16 @@ loopMicroTput() {
 					OUT_FILE="$OUT_DIR/${OP}_${IO_SIZE}_${NUM_THREAD}t"
 					mkdir -p $OUT_DIR
 
-					echo "Remove (re-create) existing files."
-					if [ $OP = "sr" ] || [ $OP = "rr" ]; then
-						# Remove the existing files and create them again. Otherwise, the file sizes might be different.
-						sudo rm -rf $DIR/*
-						$PINNING $BENCH_MICRO/build/tput_micro -d $DIR -s sw ${FILE_SIZE}M $IO_SIZE $NUM_THREAD
-					else
-						# Remove existing files. Otherwise, the file size might be different.
-						sudo rm -rf $DIR/*
+					if [ "$RM_FILES" -eq "1" ]; then
+						echo "Remove (re-create) existing files."
+						if [ $OP = "sr" ] || [ $OP = "rr" ]; then
+							# Remove the existing files and create them again. Otherwise, the file sizes might be different.
+							sudo rm -rf $DIR/*
+							$PINNING $BENCH_MICRO/build/tput_micro -d $DIR -s sw ${FILE_SIZE}M $IO_SIZE $NUM_THREAD
+						else
+							# Remove existing files. Otherwise, the file size might be different.
+							sudo rm -rf $DIR/*
+						fi
 					fi
 
 					flushCache

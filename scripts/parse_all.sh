@@ -102,7 +102,7 @@ getCpuCycles() {
 # $1 = tput result dir: results/tput
 parseMicroTput() {
 
-	echo "Extracting CPU usage from perf data."
+	# echo "Extracting CPU usage from perf data."
 	for d in $1/*; do
 		if ! [ -d "$d" ]; then
 			continue
@@ -114,8 +114,7 @@ parseMicroTput() {
 	done
 
 	# Parse throughput.
-	echo "### Throughput (filesize=MB aggtput=MB/s) ###"
-	echo "name,op,filesize,iosize,threads,aggtput,cycles"
+	echo "name,op,filesize(MB),iosize(KB),threads,aggtput(MB/s),cycles"
 	for d in $1/*; do
 		if ! [ -d "$d" ]; then
 			continue

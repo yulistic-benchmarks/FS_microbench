@@ -1,6 +1,8 @@
 #!/bin/bash
 # Main function for FS_microbench.
-set -ex
+set -xe
+
+DEVICE_IP="192.168.14.114" # Set DevFS IP address. Need ssh access without password.
 
 if [ -z "$OXBOW_ENV_SOURCED" ]; then
 	echo "Do source set_env.sh first."
@@ -32,10 +34,15 @@ if [ "$BENCHMARK_TYPE" = "throughput" ]; then
 	}
 
 	############# Overriding configurations of run_tput_all.sh ####################
-	OPS="sw rw sr rr"
-	TOTAL_WRITE_SIZE=$((30 * 1024)) # in MB
-	IO_SIZES="4K 16K 64K 1M"
-	NUM_THREADS="1 2 4 8 16"
+	# OPS="sw rw sr rr"
+	OPS="rw"
+	DO_MKFS=1
+	# TOTAL_WRITE_SIZE=$((20 * 1024)) # in MB
+	PER_FILE_WRITE_SIZE=$((2 * 1024)) # in MB.
+	IO_SIZES="4K 16K 64K 256K"
+	# IO_SIZES="4K"
+	NUM_THREADS="8 16"
+	# NUM_THREADS="1"
 	###############################################################################
 else
 	source scripts/run_lat_all.sh || {
@@ -44,13 +51,19 @@ else
 	}
 
 	############# Overriding configurations of run_lat_all.sh ####################
-	OPS="sw rw sr rr"
-	TOTAL_WRITE_SIZE=$((1024)) # in MB
-	IO_SIZES="4K 16K 64K 1M"
+	# OPS="sw rw sr rr"
+	OPS="sr rr"
+	TOTAL_WRITE_SIZE=$((256)) # in MB
+	IO_SIZES="1K 4K 16K 64K 256K 512K"
+	# IO_SIZES="1K"
 	###############################################################################
 fi
 
 MOUNT_PATH="$OXBOW_PREFIX"
+DO_CHECKPOINT=0
+
+# rm does not work with oxbow. Also, oxbow uses pre-generated file for read benchs.
+RM_FILES=0 # Should be zero.
 
 # Set total journal size.
 # TOTAL_JOURNAL_SIZE=5120 # 5 GB
@@ -71,7 +84,7 @@ initOxbow() {
 killBgOxbow() {
 	# Kill Daemon
 	echo "[OXBOW_MICROBENCH] Kill secure daemon($DAEMON_PID) and umount Oxbow."
-	$SECURE_DAEMON/run.sh -k
+	$SECURE_DAEMON/run.sh -k || true
 	sleep 5
 
 	# sudo kill -9 $DAEMON_PID
@@ -110,9 +123,43 @@ dumpOxbowConfig() {
 	cat $DEVFS/devfs_conf.sh >>${OUT_FILE}.fsconf
 }
 
+# Send remote checkpoint signal to DevFS.
+checkpoint() {
+	sig_nu=$(expr $(kill -l SIGRTMIN) + 1)
+	cmd="sudo pkill -${sig_nu} devfs"
+	ssh ${DEVICE_IP} $cmd
+}
+
+doMKFS() {
+	sleep 3
+	# mkfs.
+	${SCRIPTS}/host/mkfs.sh
+
+	# Kill existing devfs.
+	ssh libra06-bf2-rdma "sudo pkill -9 devfs" || true
+	sleep 3
+
+	# Execute devfs on smartNIC.
+	ssh libra06-bf2-rdma "cd /home/yulistic/oxbow; source set_env.sh; /home/yulistic/oxbow/oxbow/devfs/run.sh > /tmp/devfs.out 2>&1 &" || true
+	sleep 3
+
+	# Set the nice value to 0.
+	ssh root@libra06-bf2-rdma "ps -eLf | grep build/devfs | awk '{print $4}' | xargs renice -n 0 -p" &> /dev/null || true
+	sleep 3
+}
+
 ###### File system specific reset function. It is called before each benchmark run. Should be declared.
 flushCache() {
-	dropCache
+	# dropCache
+	if [ "$DO_CHECKPOINT" -eq "1" ];then
+		echo "Do Checkpoint."
+		checkpoint
+	fi
+
+	if [ "$DO_MKFS" -eq "1" ];then
+		echo "Do MKFS."
+		doMKFS
+	fi
 	killBgOxbow
 	initOxbow
 }
@@ -148,9 +195,6 @@ runBenchmark() {
 	sudo pkill -9 lat_micro || true
 	sleep 3
 
-
-	initOxbow
-
 	# Configure and mount file system.
 	sudo chown -R $USER:$USER $MOUNT_PATH
 	mkdir -p $DIRS
@@ -161,6 +205,7 @@ runBenchmark() {
 		loopMicroLat
 	fi
 
+	sleep 5
 	killBgOxbow
 }
 

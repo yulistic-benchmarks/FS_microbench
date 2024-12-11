@@ -8,10 +8,10 @@ OPS="rw sw sr rr"                                 # Ex: "rw sw sr rr"
 TOTAL_WRITE_SIZE=$((1024))                        # in MB
 IO_SIZES="4K 16K 64K 1M"                          # Ex: "1K 4K 16K 64K 1M"
 PROFILE_CPU_UTILIZATION=0
-# PINNING=""
-PINNING="numactl -N 1 -m 1"
+# PINNING="numactl -N 1 -m 1"
 # PERF_BIN="perf" # Set correct perf bin path.
 PERF_BIN="/lib/modules/$(uname -r)/source/tools/perf/perf" # Set correct perf bin path.
+RM_FILES=1
 ##########################################
 
 # Check perf bin.
@@ -47,14 +47,16 @@ loopMicroLat() {
 				OUT_FILE="$OUT_DIR/${OP}_${IO_SIZE}"
 				mkdir -p $OUT_DIR
 
-				echo "Remove (re-create) existing files."
-				if [ $OP = "sr" ] || [ $OP = "rr" ]; then
-					# Remove the existing files and create them again. Otherwise, the file sizes might be different.
-					sudo rm -rf $DIR/*
-					$PINNING $BENCH_MICRO/build/lat_micro -d $DIR -s sw ${FILE_SIZE}M $IO_SIZE 1
-				else
-					# Remove existing files. Otherwise, the file size might be different.
-					sudo rm -rf $DIR/*
+				if [ "$RM_FILES" -eq "1" ]; then
+					echo "Remove (re-create) existing files."
+					if [ $OP = "sr" ] || [ $OP = "rr" ]; then
+						# Remove the existing files and create them again. Otherwise, the file sizes might be different.
+						sudo rm -rf $DIR/*
+						$PINNING $BENCH_MICRO/build/lat_micro -d $DIR -s sw ${FILE_SIZE}M $IO_SIZE 1
+					else
+						# Remove existing files. Otherwise, the file size might be different.
+						sudo rm -rf $DIR/*
+					fi
 				fi
 
 				flushCache

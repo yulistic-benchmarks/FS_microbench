@@ -28,11 +28,14 @@ if [ "$BENCHMARK_TYPE" = "throughput" ]; then
 	}
 
 	############# Overriding configurations of run_tput_all.sh ####################
-	OPS="sw rw sr rr"
-	TOTAL_WRITE_SIZE=$((30 * 1024)) # in MB
-	IO_SIZES="4K 16K 64K 1M"
+	OPS="sr rr"
+	TOTAL_WRITE_SIZE=$((20 * 1024)) # in MB
+	# PER_FILE_WRITE_SIZE=$((2 * 1024)) # in MB
+	IO_SIZES="4K 16K 64K 256K"
 	NUM_THREADS="1 2 4 8 16"
-	# PINNING=""
+	# NUMA="1"
+	# CPU_MASK="16-31"
+	PINNING=""
 	###############################################################################
 else
 	source scripts/run_lat_all.sh || {
@@ -42,9 +45,11 @@ else
 
 	############# Overriding configurations of run_lat_all.sh ####################
 	OPS="sw rw sr rr"
-	TOTAL_WRITE_SIZE=$((1024)) # in MB
-	IO_SIZES="4K 16K 64K 1M"
-	# PINNING=""
+	TOTAL_WRITE_SIZE=$((256)) # in MB
+	IO_SIZES="1K 4K 16K 64K 256K 512K"
+	NUMA="1"
+	CPU_MASK="16-31"
+	PINNING=""
 	###############################################################################
 fi
 
@@ -60,6 +65,7 @@ echo Device path: "$DEV_PATH"
 # Set total journal size.
 # TOTAL_JOURNAL_SIZE=5120 # 5 GB
 TOTAL_JOURNAL_SIZE=$((38 * 1024)) # 38 GB
+TOTAL_INODE_NUM=6104832 # To reduce mkfs time. Set proper value.
 
 umountFS() {
 	sudo umount $MOUNT_PATH || true
@@ -97,10 +103,18 @@ runBenchmark() {
 	DIRS="$MOUNT_PATH/ext4_journal" # Overriding config.
 
 	# Configure and mount file system.
-	sudo mke2fs -t ext4 -J size=$TOTAL_JOURNAL_SIZE -E lazy_itable_init=0,lazy_journal_init=0 -F -G 1 $DEV_PATH
+	sudo mke2fs -t ext4 -J size=$TOTAL_JOURNAL_SIZE -E lazy_itable_init=0,lazy_journal_init=0 -N $TOTAL_INODE_NUM -F -G 1 $DEV_PATH
 	sudo mount -t ext4 -o barrier=0,data=journal $DEV_PATH $MOUNT_PATH
 	sudo chown -R $USER:$USER $MOUNT_PATH
 	mkdir -p $DIRS
+
+	# NUMA binding:
+	if [ -n ${CPU_MASK} ]; then
+		jbd_pid=$(ps aux | grep jbd2 | grep $(basename $DEV_PATH) | xargs | cut -d ' ' -f2)
+		sudo taskset -cp $CPU_MASK $jbd_pid
+		echo "Binding jbd2 process($jbd_pid) to NUMA ${NUMA}. Taskset result:"
+		sudo taskset -p $jbd_pid
+	fi
 
 	if [ "$BENCHMARK_TYPE" = "throughput" ]; then
 		loopMicroTput
@@ -112,10 +126,16 @@ runBenchmark() {
 
 	# Run data=ordered mode
 	DIRS="$MOUNT_PATH/ext4_ordered" # Overriding config.
-	sudo mke2fs -t ext4 -J size=$TOTAL_JOURNAL_SIZE -E lazy_itable_init=0,lazy_journal_init=0 -F -G 1 $DEV_PATH
+	sudo mke2fs -t ext4 -J size=$TOTAL_JOURNAL_SIZE -E lazy_itable_init=0,lazy_journal_init=0 -N $TOTAL_INODE_NUM -F -G 1 $DEV_PATH
 	sudo mount -t ext4 -o barrier=0 $DEV_PATH $MOUNT_PATH
 	sudo chown -R $USER:$USER $MOUNT_PATH
 	mkdir -p $DIRS
+
+	# NUMA binding:
+	jbd_pid=$(ps aux | grep jbd2 | grep $(basename $DEV_PATH) | xargs | cut -d ' ' -f2)
+	sudo taskset -cp $CPU_MASK $jbd_pid
+	echo "Binding jbd2 process($jbd_pid) to NUMA ${NUMA}. Taskset result:"
+	sudo taskset -p $jbd_pid
 
 	if [ "$BENCHMARK_TYPE" = "throughput" ]; then
 		loopMicroTput
