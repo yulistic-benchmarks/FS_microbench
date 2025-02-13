@@ -40,7 +40,7 @@ int remote;
 #define BUF_SIZE (2 << 20)
 
 typedef enum {
-	TOUCH_TRUNC,
+	/* block allocated before I/O operation */
 	SEQ_WRITE,
 	SEQ_READ,
 	RAND_WRITE,
@@ -48,6 +48,9 @@ typedef enum {
 	ZIPF_WRITE,
 	ZIPF_READ,
 	SEQ_WRITE_READ,
+	/* require block allocation */
+	SEQ_APPEND,
+	RAND_APPEND,
 	NONE
 } test_t;
 
@@ -167,27 +170,22 @@ void io_bench::prepare(void)
 			cout << "opened file: " << test_file.c_str() << endl;
 	}
 
-	/**
-   * If its random write and FS, we preallocate the file so we can do
-   * random writes
-   */
-	/*
-  if (test_type == RAND_WRITE || test_type == ZIPF_WRITE) {
-          //fallocate(fd, 0, 0, file_size_bytes);
-          cout << "allocate file" << endl;
+	/* If not appending, do fallocate before do write operation */
+	if (test_type == RAND_WRITE || test_type == ZIPF_WRITE ||
+		test_type == SEQ_WRITE) {
+        if (fallocate(fd, 0, 0, file_size_bytes))
+			err(1, "fallocate");
+        cout << "allocate file" << endl;
 
-          test_t test_type_back = test_type;
+        // test_t test_type_back = test_type;
+        // test_type = SEQ_WRITE;
+        // this->do_write();
+        // test_type = test_type_back;
+        // lseek(fd, 0, SEEK_SET);
+	}
 
-          test_type = SEQ_WRITE;
-          this->do_write();
-
-          test_type = test_type_back;
-
-          lseek(fd, 0, SEEK_SET);
-  }
-  */
-
-	if (test_type == RAND_WRITE || test_type == RAND_READ) {
+	if (test_type == RAND_WRITE || test_type == RAND_READ ||
+		test_type == RAND_APPEND) {
 		std::random_device rd;
 		std::mt19937 mt(rd());
 		// std::mt19937 mt;
@@ -220,20 +218,13 @@ void io_bench::do_write(void)
 
 	random_range = file_size_bytes / io_size;
 
-	// if (test_type == TOUCH_TRUNC) {
-	// 	ftruncate(fd, file_size_bytes);
-	// 	fallocate(fd, 0, 0, file_size_bytes);
-	// 	fsync(fd);
-	// 	return;
-	// }
-
 	cout << "# of ops: " << ops_cap << endl;
 
 	time_stats_init(&iostats, ops_cap);
 	time_stats_init(&fstats, ops_cap);
 
 	if (test_type == SEQ_WRITE || test_type == SEQ_WRITE_READ ||
-	    test_type == TOUCH_TRUNC) {
+		test_type == SEQ_APPEND) {
 		for (unsigned long i = 0; i < file_size_bytes; i += io_size) {
 			if (i + io_size > file_size_bytes)
 				size = file_size_bytes - i;
@@ -272,18 +263,19 @@ void io_bench::do_write(void)
 			//	perc += 0.1;
 			// }
 		}
-	} else if (test_type == RAND_WRITE || test_type == ZIPF_WRITE) {
+	} else if (test_type == RAND_WRITE || test_type == ZIPF_WRITE ||
+				test_type == RAND_APPEND) {
 		for (auto it : io_list) {
 			if (it + io_size > file_size_bytes)
 				size = file_size_bytes - it;
 			else
 				size = io_size;
 
-			lseek(fd, it, SEEK_SET);
+			// lseek(fd, it, SEEK_SET); /* use pwrite rather than lseek */
 
 			time_stats_start(&iostats);
 
-			bytes_written = write(fd, buf, size);
+			bytes_written = pwrite(fd, buf, size, it);
 			if (bytes_written != size) {
 				printf("write request %u received len %d\n",
 				       size, bytes_written);
@@ -435,8 +427,8 @@ void io_bench::cleanup(void)
 	//         unlink(test_file.c_str());
 	//         fsync(fd);
 	// }
-	if (test_type == TOUCH_TRUNC)
-		sync();
+	std::cout << "closing file: " << test_file.c_str() << endl;
+	unlink(test_file.c_str());
 	close(fd);
 
 #if 0
@@ -496,9 +488,7 @@ test_t io_bench::get_test_type(char *test_type)
 	/**
    * Check the mode to bench: read or write and type
    */
-	if (!strcmp(test_type, "tt")) {
-		return TOUCH_TRUNC;
-	} else if (!strcmp(test_type, "sr")) {
+	if (!strcmp(test_type, "sr")) {
 		return SEQ_READ;
 	} else if (!strcmp(test_type, "sw")) {
 		return SEQ_WRITE;
@@ -508,6 +498,10 @@ test_t io_bench::get_test_type(char *test_type)
 		return RAND_READ;
 	} else if (!strcmp(test_type, "wr")) {
 		return SEQ_WRITE_READ;
+	} else if (!strcmp(test_type, "ap")) {
+		return SEQ_APPEND;
+	} else if (!strcmp(test_type, "ra")) {
+		return RAND_APPEND;
 	} else {
 		show_usage("lat_micro");
 		cerr << "unsupported test type" << test_type << endl;
