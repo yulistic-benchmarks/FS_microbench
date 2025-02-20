@@ -49,12 +49,19 @@ op=$1
 if [ "$op" = "sw" ]; then
 	parseLog "$2"
 
-elif [ "$op" = "sr" ]; then
+elif [ "$op" = "rw" ]; then
 	parseLog "$2"
 
-elif [ "$op" = "rw" ]; then
+elif [ "$op" = "ap" ]; then
+	parseLog "$2"
+
+elif [ "$op" = "ra" ]; then
+	parseLog "$2"
+
+elif [ "$op" = "sr" ]; then
 	parseLog "$2"
 
 elif [ "$op" = "rr" ]; then
 	parseLog "$2"
+
 fi

@@ -22,6 +22,9 @@
 #include <time.h>
 #include <unistd.h>
 #include <vector>
+#include <cstdlib>
+#include <stdlib.h>
+
 
 // #define VERIFY
 
@@ -40,6 +43,9 @@ int remote;
 #define BUF_SIZE (2 << 20)
 
 typedef enum {
+	/* only for preparing */
+	PREPARE_FILE,
+
 	/* block allocated before I/O operation */
 	SEQ_WRITE,
 	SEQ_READ,
@@ -60,6 +66,17 @@ typedef unsigned long addr_t;
 
 using namespace std;
 
+void dropCaches() {
+
+    std::cout << "Attempting to drop caches with sudo...\n";
+    int ret = system("sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'");
+
+    if (ret != 0) {
+        std::cerr << "Failed to drop caches. Make sure you have sudo privileges.\n";
+    } else {
+        std::cout << "Page cache dropped successfully.\n";
+    }
+}
 class io_bench : public CThread {
     public:
 	io_bench(int _id, unsigned long _file_size_bytes, unsigned int _io_size,
@@ -146,7 +163,11 @@ void io_bench::prepare(void)
 	//	exit(-1);
 	// }
 
-	buf = new char[(4 << 20)];
+	// buf = new char[(4 << 20)];
+	buf = (char*)malloc(io_size);
+	if (io_size != 1024)
+		posix_memalign((void**)&buf, 4096, io_size);
+	// buf = new char[(io_size)];
 
 	if (test_type == SEQ_READ || test_type == RAND_READ) {
 		for (unsigned long i = 0; i < BUF_SIZE; i++)
@@ -155,8 +176,8 @@ void io_bench::prepare(void)
 		if ((fd = open(test_file.c_str(), O_RDWR)) < 0)
 			err(1, "open");
 	} else {
-		for (unsigned long i = 0; i < BUF_SIZE; i++)
-			buf[i] = '0' + (i % 10);
+		// for (unsigned long i = 0; i < BUF_SIZE; i++)
+		// 	buf[i] = '0' + (i % 10);
 
 		fd = open(test_file.c_str(), O_RDWR | O_CREAT | O_TRUNC,
 			  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
@@ -173,15 +194,27 @@ void io_bench::prepare(void)
 	/* If not appending, do fallocate before do write operation */
 	if (test_type == RAND_WRITE || test_type == ZIPF_WRITE ||
 		test_type == SEQ_WRITE) {
-        if (fallocate(fd, 0, 0, file_size_bytes))
-			err(1, "fallocate");
-        cout << "allocate file" << endl;
+        // if (fallocate(fd, 0, 0, file_size_bytes))
+		// 	err(1, "fallocate");
+        // cout << "allocate file" << endl;
 
-        // test_t test_type_back = test_type;
-        // test_type = SEQ_WRITE;
-        // this->do_write();
-        // test_type = test_type_back;
-        // lseek(fd, 0, SEEK_SET);
+		/* Since ufs-microbench not support fallocate we do same thing for preparation */
+        test_t test_type_back = test_type;
+		unsigned int io_size_back = io_size;
+        test_type = PREPARE_FILE;
+		io_size = 4096;
+        this->do_write();
+		fsync(fd);
+		close(fd);
+		dropCaches();
+		sleep(1);
+		fd = open(test_file.c_str(), O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+		if (fd < 0) {
+			err(1, "open");
+		} else
+			cout << "opened file: " << test_file.c_str() << endl;
+        test_type = test_type_back;
+		io_size = io_size_back;
 	}
 
 	if (test_type == RAND_WRITE || test_type == RAND_READ ||
@@ -220,10 +253,25 @@ void io_bench::do_write(void)
 
 	cout << "# of ops: " << ops_cap << endl;
 
-	time_stats_init(&iostats, ops_cap);
-	time_stats_init(&fstats, ops_cap);
+	if (test_type != PREPARE_FILE)
+		time_stats_init(&iostats, ops_cap);
+	// time_stats_init(&fstats, ops_cap);
 
-	if (test_type == SEQ_WRITE || test_type == SEQ_WRITE_READ ||
+	if (test_type == PREPARE_FILE) {
+		for (unsigned long i = 0; i < file_size_bytes; i += io_size) {
+			if (i + io_size > file_size_bytes)
+				size = file_size_bytes - i;
+			else
+				size = io_size;
+
+			bytes_written = write(fd, buf, size);
+
+			count++;
+			if (count >= ops_cap)
+				break;
+		}
+		fsync(fd);
+	} else if (test_type == SEQ_WRITE || test_type == SEQ_WRITE_READ ||
 		test_type == SEQ_APPEND) {
 		for (unsigned long i = 0; i < file_size_bytes; i += io_size) {
 			if (i + io_size > file_size_bytes)
@@ -239,9 +287,9 @@ void io_bench::do_write(void)
 
 			bytes_written = write(fd, buf, size);
 			if (do_fsync) {
-				time_stats_start(&fstats);
+				// time_stats_start(&fstats);
 				fsync(fd);
-				time_stats_stop(&fstats);
+				// time_stats_stop(&fstats);
 			}
 
 			time_stats_stop(&iostats);
@@ -282,9 +330,9 @@ void io_bench::do_write(void)
 				errx(1, "write");
 			}
 			if (do_fsync) {
-				time_stats_start(&fstats);
+				// time_stats_start(&fstats);
 				fsync(fd);
-				time_stats_stop(&fstats);
+				// time_stats_stop(&fstats);
 			}
 
 			time_stats_stop(&iostats);
@@ -296,15 +344,16 @@ void io_bench::do_write(void)
 		}
 	}
 
-	time_stats_print(
-		&iostats,
-		(char *)"--------------- Aggregate Latency (Write + Fsync)");
+	if (test_type != PREPARE_FILE)
+		time_stats_print(
+			&iostats,
+			(char *)"--------------- Aggregate Latency (Write + Fsync)");
 
-	if (do_fsync) {
-		double avg = time_stats_get_avg(&fstats);
-		printf("\tfsync-avg: %.3f msec (%.2f usec)\n", avg * 1000.0,
-		       avg * 1000000.0);
-	}
+	// if (do_fsync) {
+	// 	double avg = time_stats_get_avg(&fstats);
+	// 	printf("\tfsync-avg: %.3f msec (%.2f usec)\n", avg * 1000.0,
+	// 	       avg * 1000000.0);
+	// }
 
 	return;
 }
@@ -494,6 +543,8 @@ test_t io_bench::get_test_type(char *test_type)
 		return SEQ_WRITE;
 	} else if (!strcmp(test_type, "rw")) {
 		return RAND_WRITE;
+	} else if (!strcmp(test_type, "zw")) {
+		return ZIPF_WRITE;
 	} else if (!strcmp(test_type, "rr")) {
 		return RAND_READ;
 	} else if (!strcmp(test_type, "wr")) {
