@@ -66,7 +66,7 @@ char *test_file_name = "testfile";
 // #define VERIFY
 
 typedef enum {
-	TOUCH_TRUNC,
+	APPEND,
 	SEQ_WRITE,
 	SEQ_READ,
 	SEQ_WRITE_READ,
@@ -262,8 +262,12 @@ void io_bench::prepare(void)
 			  O_RDWR | O_CREAT | O_TRUNC | O_DIRECT,
 			  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 #else
-		fd = open(test_file.c_str(), O_RDWR | O_CREAT | O_TRUNC,
-			  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+		if (test_type == SEQ_WRITE)
+			fd = open(test_file.c_str(), O_RDWR,
+				S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+		else
+			fd = open(test_file.c_str(), O_RDWR | O_CREAT | O_TRUNC,
+			S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 #endif
 		if (fd < 0) {
 			err(1, "open");
@@ -374,7 +378,7 @@ void io_bench::do_write(void)
 	time_stats_init(&fsync_time, 1);
 	cout << "# of ops: " << ops_cap << endl;
 
-	if (test_type == SEQ_WRITE || test_type == TOUCH_TRUNC) {
+	if (test_type == SEQ_WRITE || test_type == APPEND) {
 		unsigned int _io_size = io_size;
 
 #ifdef RUN_INF
@@ -681,10 +685,6 @@ void io_bench::cleanup(void)
 	// 	unlink(test_file.c_str());
 	// 	fsync(fd);
 	// }
-	if (test_type == TOUCH_TRUNC) {
-		fsync(fd);
-		sync();
-	}
 	close(fd);
 
 #if 0
@@ -748,8 +748,8 @@ test_t io_bench::get_test_type(char *test_type)
 	/**
    * Check the mode to bench: read or write and type
    */
-	if (!strcmp(test_type, "tt")) {
-		return TOUCH_TRUNC;
+	if (!strcmp(test_type, "ap")) {
+		return APPEND;
 	} else if (!strcmp(test_type, "sr")) {
 		return SEQ_READ;
 	} else if (!strcmp(test_type, "sw")) {
@@ -817,7 +817,7 @@ void io_bench::show_usage(const char *prog)
 	std::cerr
 		<< "usage: " << prog
 		<< " [-d <directory>] [-f <file-prefix>] [-n <# of ops>] [-s "
-		   "'fsync'] <wr/sr/sw/rr/rw/zr/zw/zm>"
+		   "'fsync'] <ap/wr/sr/sw/rr/rw/zr/zw/zm>"
 		<< " <size: X{G,M,K,P}, eg: 100M> <IO size, e.g.: 4K> <# of thread>"
 		<< endl;
 }
