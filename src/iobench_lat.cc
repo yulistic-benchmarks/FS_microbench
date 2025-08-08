@@ -102,7 +102,9 @@ io_bench::io_bench(int _id, unsigned long _file_size_bytes,
 	  test_type(_test_type), zipf_file(_zipf_file)
 {
 	test_file.assign(test_dir_prefix);
-	test_file += "/" + std::string(test_file_name); //+ std::to_string(id);
+
+	test_file += "/" + std::string(test_file_name) + std::to_string(0) + "-" +
+	             std::to_string(0) + "-" + std::to_string(id);
 }
 
 #define handle_error_en(en, msg)                                               \

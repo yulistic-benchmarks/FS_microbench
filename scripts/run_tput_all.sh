@@ -71,10 +71,10 @@ loopMicroTput() {
 
 					if [ "$RM_FILES" -eq "1" ]; then
 						echo "Remove (re-create) existing files."
-						if [ $OP = "sr" ] || [ $OP = "rr" ]; then
+						if [ $OP = "sr" ] || [ $OP = "rr" ] || [ $OP = "ap" ]; then
 							# Remove the existing files and create them again. Otherwise, the file sizes might be different.
 							sudo rm -rf $DIR/*
-							$PINNING $BENCH_MICRO/build/tput_micro -d $DIR -s sw ${FILE_SIZE}M $IO_SIZE $NUM_THREAD
+							$PINNING $BENCH_MICRO/build/tput_micro -d $DIR -s ap ${FILE_SIZE}M $IO_SIZE $NUM_THREAD
 						else
 							# Remove existing files. Otherwise, the file size might be different.
 							sudo rm -rf $DIR/*
@@ -92,7 +92,7 @@ loopMicroTput() {
 
 						# Use perf.
 						OUT_CPU_FILE=${OUT_FILE}.perfdata
-						PERF_PREFIX="sudo -E bash -c \" $PERF_BIN -F 99 -e cycles record -a -o $OUT_CPU_FILE --"
+						PERF_PREFIX="sudo -E bash -c \" $PERF_BIN record -F 99 -e cycles -a -o $OUT_CPU_FILE --"
 						PERF_SUFFIX=" \" "
 					else
 						PERF_PREFIX=""
