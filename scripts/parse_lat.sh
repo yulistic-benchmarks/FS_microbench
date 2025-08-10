@@ -12,25 +12,25 @@ parseLog() {
 		# echo "$line" | xargs
 		# The order of conditions are important.
 		if [[ "$line" == *"fsync-avg:"* ]]; then
-			fsync_avg=$(echo "$line" | xargs | cut -d " " -f4 | cut -d "(" -f2)
+			fsync_avg=$(awk -F'[ ()]+' '{ $1=$1; print $4 }' <<< "$line")
 		elif [[ "$line" == *"avg:"* ]]; then
-			avg=$(echo "$line" | xargs | cut -d " " -f4 | cut -d "(" -f2)
+			avg=$(awk -F'[ ()]+' '{ $1=$1; print $4 }' <<< "$line")
 		elif [[ "$line" == *"min:"* ]]; then
-			min=$(echo "$line" | xargs | cut -d " " -f4 | cut -d "(" -f2)
+			min=$(awk -F'[ ()]+' '{ $1=$1; print $4 }' <<< "$line")
 		elif [[ "$line" == *"max:"* ]]; then
-			max=$(echo "$line" | xargs | cut -d " " -f4 | cut -d "(" -f2)
+			max=$(awk -F'[ ()]+' '{ $1=$1; print $4 }' <<< "$line")
 		elif [[ "$line" == *"std:"* ]]; then
-			std=$(echo "$line" | xargs | cut -d " " -f4 | cut -d "(" -f2)
+			std=$(awk -F'[ ()]+' '{ $1=$1; print $4 }' <<< "$line")
 		elif [[ "$line" == *"50 percentile"* ]]; then
-			p_50=$(echo "$line" | xargs | cut -d " " -f6 | cut -d "(" -f2)
+			p_50=$(awk -F'[ ()]+' '{ $1=$1; print $6 }' <<< "$line")
 		elif [[ "$line" == *"99.999 percentile"* ]]; then
-			p_99999=$(echo "$line" | xargs | cut -d " " -f5 | cut -d "(" -f2)
+			p_99999=$(awk -F'[ ()]+' '{ $1=$1; print $5 }' <<< "$line")
 		elif [[ "$line" == *"99.99 percentile"* ]]; then
-			p_9999=$(echo "$line" | xargs | cut -d " " -f6 | cut -d "(" -f2)
+			p_9999=$(awk -F'[ ()]+' '{ $1=$1; print $6 }' <<< "$line")
 		elif [[ "$line" == *"99.9 percentile"* ]]; then
-			p_999=$(echo "$line" | xargs | cut -d " " -f6 | cut -d "(" -f2)
+			p_999=$(awk -F'[ ()]+' '{ $1=$1; print $6 }' <<< "$line")
 		elif [[ "$line" == *"99 percentile"* ]]; then
-			p_99=$(echo "$line" | xargs | cut -d " " -f6 | cut -d "(" -f2)
+			p_99=$(awk -F'[ ()]+' '{ $1=$1; print $6 }' <<< "$line")
 		fi
 		# echo "avg=$avg min=$min max=$max std=$std p_50=$p_50 p_99=$p_99 p_999=$p_999 p_9999=$p_9999 p_99999=$p_99999 fsync_avg=$fsync_avg"
 	done < <(printf '%s\n' "$1")

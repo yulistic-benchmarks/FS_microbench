@@ -16,8 +16,8 @@ getTputMicroCmd() {
 
 	while read -r line; do
 		# echo "$line"
-		if [[ $line == "Command:"* ]]; then
-			cmd_opt=$(echo $line | sed 's/.*tput_micro//g' | xargs)
+        	if [[ $line == "Command:"* ]]; then
+            		cmd_opt=$(echo "$line" | sed 's/.*tput_micro//g' | awk '{ $1=$1; print }')
 			op=$(echo "$cmd_opt" | cut -d" " -f4)
 			file_size=$(echo "$cmd_opt" | cut -d" " -f5 | cut -d"M" -f1)
 			io_size=$(echo "$cmd_opt" | cut -d" " -f6)
@@ -81,7 +81,7 @@ getCpuUsage() {
 			start_time=$(echo "$line" | cut -d " " -f1)
 			echo -n "$start_time,"
 		fi
-		cpu_idle=$(echo "$line" | xargs | cut -d " " -f7)
+		cpu_idle=$(awk '{ $1=$1; print $7 }' <<< "$line")
 
 		# cpu usage = 100 - idle
 		cpu_usage=$(awk "BEGIN {print 100.00 - $cpu_idle}")
@@ -94,7 +94,7 @@ getCpuUsage() {
 
 getCpuCycles() {
 	if [ -f $1 ]; then
-		cpu_cycles=$(grep "Event count" $1 | xargs | cut -d ' ' -f 5)
+		cpu_cycles=$(grep "Event count" "$1" | awk '{ $1=$1; print $5 }')
 		echo -n "$cpu_cycles"
 	fi
 }
@@ -167,7 +167,7 @@ getLatMicroCmd() {
 	while read -r line; do
 		# echo "$line"
 		if [[ $line == "Command:"* ]]; then
-			cmd_opt=$(echo $line | sed 's/.*lat_micro//g' | xargs)
+			cmd_opt=$(echo "$line" | sed 's/.*lat_micro//g' | awk '{ $1=$1; print }')
 			op=$(echo "$cmd_opt" | cut -d" " -f4)
 			file_size=$(echo "$cmd_opt" | cut -d" " -f5 | cut -d"M" -f1)
 			io_size=$(echo "$cmd_opt" | cut -d" " -f6)

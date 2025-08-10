@@ -12,7 +12,7 @@ parseLog() {
 		# echo "$line" | xargs
 		# The order of conditions are important.
 		if [[ "$line" == *"Aggregated throughput:"* ]]; then
-			aggr_tput=$(echo "$line" | xargs | cut -d " " -f3)
+			aggr_tput=$(awk '{ $1=$1; print $3 }' <<< "$line")
 		fi
 
 		# if [[ "$line" == *"(FSYNC)LATENCY:"* ]]; then
