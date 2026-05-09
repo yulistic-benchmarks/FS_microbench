@@ -222,9 +222,9 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 			parseMicroTput $dir > tput_result.txt
 
 			# Sort and print.
-			cat tput_result.txt | head -n 3
-			cat tput_result.txt | tail -n +4 | sort -t, -k2,2 -k1,1 -k4,4n -k5,5n
-			rm tput_result.txt
+			cat tput_result.txt | head -n 1
+			cat tput_result.txt | tail -n +2 | sort -t, -k2,2 -k1,1 -k4,4n -k5,5n
+			# rm tput_result.txt
 
 
 		elif [ $(basename $dir) = "lat" ]; then

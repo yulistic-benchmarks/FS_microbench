@@ -28,9 +28,9 @@ if [ "$BENCHMARK_TYPE" = "throughput" ]; then
 	}
 
 	############# Overriding configurations of run_tput_all.sh ####################
-	OPS="sr rr"
-	TOTAL_WRITE_SIZE=$((20 * 1024)) # in MB
-	# PER_FILE_WRITE_SIZE=$((2 * 1024)) # in MB
+	OPS="ap sr rr rw"
+	# TOTAL_WRITE_SIZE=$((20 * 1024)) # in MB
+	PER_FILE_WRITE_SIZE=$((2 * 1024)) # in MB
 	IO_SIZES="4K 16K 64K 256K"
 	NUM_THREADS="1 2 4 8 16"
 	# NUMA="1"

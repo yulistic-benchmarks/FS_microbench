@@ -587,13 +587,13 @@ void io_bench::do_read(void)
 				// verify buffer
 				for (int j = 0; j < io_size; j++) {
 					if (buf[j] != '0' + (i % 10)) {
-						// hexdump(buf + j, 256);
-						printf("read data mismatch at %lu\n",
+						hexdump(buf + j, 256);
+						printf("!!!!!!! read data mismatch at %lu\n",
 						       i);
-						printf("expected %c read %c\n",
+						printf("!!!!!!! expected %c read %c\n",
 						       (int)('0' + (i % 10)),
 						       buf[j]);
-						// exit(-1);
+						exit(-1);
 						break;
 					}
 				}
@@ -906,6 +906,11 @@ int main(int argc, char *argv[])
 	double aggr_tput;
 #ifdef PROFILE_CPU_UTILIZATION
 	struct timespec real_time;
+#endif
+
+#ifdef VERIFY
+	cout << "[WARNING] VERIFY bit is on. Turn it off for performance."
+	     << endl;
 #endif
 
 	device_id = getenv("FILE_ID");

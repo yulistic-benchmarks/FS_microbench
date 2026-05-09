@@ -1,8 +1,20 @@
 #!/bin/bash
 # Main function for FS_microbench.
+# Assume that tmux session is ready as below.
+# pane 0: Bench
+# pane 1: Free
+# pane 2: Secure Daemon
+# pane 3: DevFS (Connected to SmartNIC via ssh & cd to the project root
+# 	  directory & source set_env.sh)
+#
 set -xe
 
 DEVICE_IP="192.168.14.114" # Set DevFS IP address. Need ssh access without password.
+
+# Tmux pane numbers. Pane 1 is free.
+BENCH_PANE="0"
+SECURE_DAEMON_PANE="2"
+DEVFS_PANE="3"
 
 if [ -z "$OXBOW_ENV_SOURCED" ]; then
 	echo "Do source set_env.sh first."
@@ -35,13 +47,13 @@ if [ "$BENCHMARK_TYPE" = "throughput" ]; then
 
 	############# Overriding configurations of run_tput_all.sh ####################
 	# OPS="sw rw sr rr"
-	OPS="rw"
+	OPS="ap sr rr rw" # ap should be the first. (checkpointing and mkfs order depend on it)
 	DO_MKFS=1
 	# TOTAL_WRITE_SIZE=$((20 * 1024)) # in MB
 	PER_FILE_WRITE_SIZE=$((2 * 1024)) # in MB.
 	IO_SIZES="4K 16K 64K 256K"
 	# IO_SIZES="4K"
-	NUM_THREADS="8 16"
+	NUM_THREADS="1 2 4 8 10 16"
 	# NUM_THREADS="1"
 	###############################################################################
 else
@@ -60,7 +72,7 @@ else
 fi
 
 MOUNT_PATH="$OXBOW_PREFIX"
-DO_CHECKPOINT=0
+DO_CHECKPOINT=1
 
 # rm does not work with oxbow. Also, oxbow uses pre-generated file for read benchs.
 RM_FILES=0 # Should be zero.
@@ -71,21 +83,28 @@ TOTAL_JOURNAL_SIZE=$((38 * 1024)) # 38 GB
 
 initOxbow() {
 	# Runninng Daemon as background
-	$SECURE_DAEMON/run.sh -b
-	sleep 10
-	DAEMON_PID=$(pgrep "secure_daemon")
-	echo "[OXBOW_MICROBENCH] Daemon runnning PID: $DAEMON_PID"
+	sudo umount $OXBOW_PREFIX || true
+	sleep 2
 
-	sudo mount -t illufs dummy $OXBOW_PREFIX
-	echo "[OXBOW_MICROBENCH] mount oxbow FS\n"
-	sleep 5
+	tmux send-keys -t "$SECURE_DAEMON_PANE" "$SECURE_DAEMON/run.sh" C-m || true
+	# $SECURE_DAEMON/run.sh -b  # Run in background. (deprecated)
+	sleep 10
+
+	# DAEMON_PID=$(pgrep "secure_daemon")
+	# echo "[OXBOW_MICROBENCH] Daemon runnning PID: $DAEMON_PID"
+
+	# TMP: No more mount.
+	# sudo mount -t illufs dummy $OXBOW_PREFIX
+	# echo "[OXBOW_MICROBENCH] mount oxbow FS\n"
+	# sleep 5
 }
 
 killBgOxbow() {
 	# Kill Daemon
-	echo "[OXBOW_MICROBENCH] Kill secure daemon($DAEMON_PID) and umount Oxbow."
+	# echo "[OXBOW_MICROBENCH] Kill secure daemon($DAEMON_PID) and umount Oxbow."
+	echo "[OXBOW_MICROBENCH] Kill secure daemon and umount Oxbow."
 	$SECURE_DAEMON/run.sh -k || true
-	sleep 5
+	sleep 3
 
 	# sudo kill -9 $DAEMON_PID
 	# echo "[OXBOW_MICROBENCH] Exit secure daemon $DAEMON_PID"
@@ -114,6 +133,7 @@ dumpOxbowConfig() {
 	echo "$SECURE_DAEMON/secure_daemon_conf.sh:" >>${OUT_FILE}.fsconf
 	cat $SECURE_DAEMON/secure_daemon_conf.sh >>${OUT_FILE}.fsconf
 
+	# Dump local devfs config. It may be different from the one on SmartNIC.
 	if [ -e "${DEVFS}/myconf.sh" ]; then
 		echo "$DEVFS/myconf.sh" >>${OUT_FILE}.fsconf
 		cat $DEVFS/myconf.sh >>${OUT_FILE}.fsconf
@@ -125,42 +145,58 @@ dumpOxbowConfig() {
 
 # Send remote checkpoint signal to DevFS.
 checkpoint() {
+	# Clear flag.
+	# Make sure the file path is identical to the one in the source code.
+	# The path is in the NFS mount point. So, it is set by devfs in the SmartNIC.
+	sudo ${SCRIPTS}/exp_flag.sh create ${EXP_FLAG_DIR}/ckpt_done 0
+
 	sig_nu=$(expr $(kill -l SIGRTMIN) + 1)
 	cmd="sudo pkill -${sig_nu} devfs"
-	ssh ${DEVICE_IP} $cmd
+	ssh ${DEVICE_IP} $cmd || true
+
+	# Wait for the flag is finished.
+	sudo ${SCRIPTS}/exp_flag.sh ${EXP_FLAG_DIR}/ckpt_done 1
+
+	## Timeout-based wait.
+	# sleep 10
 }
 
 doMKFS() {
 	sleep 3
+
 	# mkfs.
 	${SCRIPTS}/host/mkfs.sh
 
 	# Kill existing devfs.
-	ssh libra06-bf2-rdma "sudo pkill -9 devfs" || true
+	ssh ${DEVICE_IP} "sudo pkill -9 devfs" || true
 	sleep 3
 
 	# Execute devfs on smartNIC.
-	ssh libra06-bf2-rdma "cd /home/yulistic/oxbow; source set_env.sh; /home/yulistic/oxbow/oxbow/devfs/run.sh > /tmp/devfs.out 2>&1 &" || true
-	sleep 3
+	tmux send-keys -t "$DEVFS_PANE" "$DEVFS/run.sh" C-m || true
 
-	# Set the nice value to 0.
-	ssh root@libra06-bf2-rdma "ps -eLf | grep build/devfs | awk '{print $4}' | xargs renice -n 0 -p" &> /dev/null || true
-	sleep 3
+	# Using ssh. (deprecated)
+	# # Kill existing devfs.
+	# ssh ${DEVICE_IP} "sudo pkill -9 devfs" || true
+	# sleep 3
+	#
+	# # Execute devfs on smartNIC.
+	# ssh ${DEVICE_IP} "cd /home/yulistic/oxbow; source set_env.sh; /home/yulistic/oxbow/oxbow/devfs/run.sh > /tmp/devfs.out 2>&1 &" || true
+	# sleep 3
+	#
+	# Set the nice value to 0. (deprecated)
+	# ssh ${DEVICE_IP} "ps -eLf | grep build/devfs | awk '{print $4}' | xargs renice -n 0 -p" &> /dev/null || true
+	# sleep 3
 }
 
 ###### File system specific reset function. It is called before each benchmark run. Should be declared.
 flushCache() {
-	# dropCache
-	if [ "$DO_CHECKPOINT" -eq "1" ];then
-		echo "Do Checkpoint."
-		checkpoint
-	fi
-
-	if [ "$DO_MKFS" -eq "1" ];then
+	if [ "$DO_MKFS" -eq "1" ] && [ "$OP" = "ap" ]; then
 		echo "Do MKFS."
 		doMKFS
 	fi
+
 	killBgOxbow
+
 	initOxbow
 }
 
@@ -180,7 +216,14 @@ runFileSystemSpecific() {
 	echo Command: "$CMD" | tee ${OUT_FILE}.out
 
 	# Execute
+	# tmux send-keys -t "$BENCH_PANE" "$CMD | tee -a ${OUT_FILE}.out" C-m || true
 	eval $CMD | tee -a ${OUT_FILE}.out
+
+	# Do checkpoint.
+	if [ "$DO_CHECKPOINT" -eq "1" ] && [ "$OP" = "ap" ]; then
+		echo "Do Checkpoint."
+		checkpoint
+	fi
 }
 
 runBenchmark() {
@@ -193,7 +236,7 @@ runBenchmark() {
 	$SECURE_DAEMON/run.sh -k || true
 	sudo pkill -9 tput_micro || true
 	sudo pkill -9 lat_micro || true
-	sleep 3
+	sleep 2
 
 	# Configure and mount file system.
 	sudo chown -R $USER:$USER $MOUNT_PATH

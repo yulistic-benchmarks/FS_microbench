@@ -54,8 +54,8 @@ loopMicroTput() {
 			# Configuration with the different number of threads.
 			[[ $(type -t configMultiThread) == function ]] && configMultiThread
 
-			for OP in $OPS; do
-				for IO_SIZE in $IO_SIZES; do
+			for IO_SIZE in $IO_SIZES; do
+				for OP in $OPS; do
 					# Set file size.
 					if [ -n "$PER_FILE_WRITE_SIZE" ];then
 						FILE_SIZE=$PER_FILE_WRITE_SIZE
