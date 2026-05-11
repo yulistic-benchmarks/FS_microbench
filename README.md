@@ -45,7 +45,7 @@ in your new script file.
 ### (cf.) Run throughput micro benchmark (simple command)
 
 ```shell
-build/tput_micro -s sw 1G 4K 1
+build/tput_micro -s ap 1G 4K 1
 ```
 
 ### (cf.) Run latency micro benchmark (simple command)
